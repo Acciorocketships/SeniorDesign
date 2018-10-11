@@ -30,43 +30,53 @@ class Gauss:
 		self.denSig = invsigma if isinstance(invsigma,list) else [invsigma]
 
 
-	def globalMin(self,approx=False):
-		# TODO: catch single numerator single denominator (set approx=True)
-		solver = "secant"
-		# Initial Guess Calculation
+	def min(self,approx=False):
+		
 		guess = 0
-		totalweighting = 0
-		maxDen = (0, None, None)
-		for i in range(len(self.denSig)):
-			if maxDen[2] == None or self.denSig[i] > maxDen[2]:
-				maxDen = (self.denC[i], self.denMu[i], self.denSig[i])
-		for i in range(len(self.numSig)):
-			if maxDen[2] != None and self.numSig[i] != None:
-				weighting = self.numC[i] * (self.numSig[i] / maxDen[2]) ** 2
-			else:
-				weighting = 1
-			if self.numSig[i] != maxDen[2] and maxDen[2] != None:
-				if self.numSig[i] == None:
-					localmin = maxDen[1]
+		
+		if self.denSig == [None]:
+			avggauss = (self.numC[0], self.numMu[0], self.numSig[0])
+			for i in range(1, len(self.numSig)):
+				avggauss = self.multiply(avggauss, (self.numC[i], self.numMu[i], self.numSig[i]))
+			guess = avggauss[1]
+		
+		else:
+			totalweighting = 0
+			maxDen = (0, None, None)
+			for i in range(len(self.denSig)):
+				if maxDen[2] == None or self.denSig[i] > maxDen[2]:
+					maxDen = (self.denC[i], self.denMu[i], self.denSig[i])
+			for i in range(len(self.numSig)):
+				if maxDen[2] != None and self.numSig[i] != None:
+					weighting = self.numC[i] * (self.numSig[i] / maxDen[2]) ** 2
 				else:
-					localmin = Gauss.minGaussRatio(self.numMu[i],maxDen[1],self.numSig[i],maxDen[2])
-			else:
-				localmin = 0
-			guess += weighting * localmin
-			totalweighting += weighting
-		if totalweighting != 0:
-			guess = guess / totalweighting
+					weighting = 1
+				if self.numSig[i] != maxDen[2] and maxDen[2] != None:
+					if self.numSig[i] == None:
+						localmin = maxDen[1]
+					else:
+						localmin = Gauss.minGaussRatio(self.numMu[i],maxDen[1],self.numSig[i],maxDen[2])
+				else:
+					localmin = 0
+				guess += weighting * localmin
+				totalweighting += weighting
+			if totalweighting != 0:
+				guess = guess / totalweighting
+
 		if approx:
 			return guess
-		eqn = lambdify([Gauss.x], self.evaluate().diff(Gauss.x), "mpmath")
-		root = findroot(eqn,guess,solver=solver)
-		return float(root)
-		# initial guess is weighted average of minGaussRatios for each ratio, where the weighting factor is c * (sigma1/sigma2)^2
-		# check that at least one numerator is larger than the denominator (and that there is a denominator)
-		# add constraints, use calculus of variations
+		return self.criticalPoint(guess)
 
-	def localMin(self,x):
-		return findroot(self.evaluate(Gauss.x),x,solver=solver)
+
+	def criticalPoint(self,x):
+		# The critical point closest to x
+		# This doesn't guarantee a minimum
+		# import time; starttime = time.time()
+		eqn = lambdify([Gauss.x], self.evaluate().diff(Gauss.x), "mpmath")
+		root = findroot(eqn,x,solver="anewton")
+		# print (time.time() - starttime)
+		return float(root)
+
 
 	def evaluate(self,x=None):
 		# evaluates at a given x, or symbolically if given Symbol('x'). f[x] calls evaluate.
@@ -149,7 +159,7 @@ class Gauss:
 			for i1 in range(len(poly1[0])):
 				ci, mui, sigi = self.multiply((poly0[0][i0],poly0[1][i0],poly0[2][i0]),
 									          (poly1[0][i1],poly1[1][i1],poly1[2][i1]))
-				i = i0*len(poly1) + i1
+				i = i0*len(poly1[0]) + i1
 				c[i] = ci
 				mu[i] = mui
 				sigma[i] = sigi
@@ -191,13 +201,9 @@ class Gauss:
 		selfDenC = self.denC
 		selfDenMu = self.denMu
 		selfDenSig = self.denSig
-		self.numC = selfDenC
-		self.numMu = selfDenMu
-		self.numSig = selfDenSig
-		self.denC = selfNumC
-		self.denMu = selfNumMu
-		self.denSig = selfNumSig
-		return self.__mul__(other)
+		selfcopy = Gauss(c=list(selfDenC),mu=list(selfDenMu),sigma=list(selfDenSig),
+						 invc=list(selfNumC), invmu=list(selfNumMu), invsigma=list(selfNumSig))
+		return selfcopy.__mul__(other)
 
 
 	def __truediv__(self,other):
@@ -205,7 +211,9 @@ class Gauss:
 
 		if not isinstance(other,Gauss):
 			other = Gauss(c=other)
-
+		else:
+			other = Gauss(c=list(other.numC),mu=list(other.numMu),sigma=list(other.numSig),
+						  invc=list(other.denC), invmu=list(other.denMu), invsigma=list(other.denSig))
 		otherNumC = other.numC
 		otherNumMu = other.numMu
 		otherNumSig = other.numSig
@@ -231,7 +239,20 @@ class Gauss:
 
 
 	def __sub__(self,other):
+		# self - other
+		if not isinstance(other,Gauss):
+			other = Gauss(c=other)
 		return self.__add__(other.__neg__())
+
+	def __rsub__(self,other):
+		# other - self
+		if not isinstance(other,Gauss):
+			other = Gauss(c=other)
+		return other.__add__(self.copy().__neg__())
+
+	def copy(self):
+		return Gauss(c=list(self.numC),mu=list(self.numMu),sigma=list(self.numSig),
+					 invc=list(self.denC), invmu=list(self.denMu), invsigma=list(self.denSig))
 
 
 	def __eq__(self,other):
@@ -248,11 +269,13 @@ class Gauss:
 
 
 	def plot(self):
-		plot(self.evaluate(Gauss.x))
+		plot(self.evaluate(Gauss.x), ylim=(-1,10))
 
 
 
 if __name__ == '__main__':
 	g1 = Gauss(mu=[0],sigma=[1])
-	g2 = Gauss(mu=[1],sigma=[1])
+	g2 = Gauss(mu=[1],sigma=[2])
+	g3 = g2 / g1
+	g4 = Gauss(mu=0,sigma=1) + Gauss(mu=3,sigma=1) + Gauss(mu=6,sigma=2)
 	import code; code.interact(local=locals())
