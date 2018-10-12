@@ -30,50 +30,76 @@ class Gauss:
 		self.denSig = invsigma if isinstance(invsigma,list) else [invsigma]
 
 
-	def min(self,approx=False):
+	def min(self,approx=False,check=False):
 		
+		# the approximation equals the min if there is one term in the numerator and denominator
 		guess = 0
-		
-		if self.denSig == [None]:
-			avggauss = (self.numC[0], self.numMu[0], self.numSig[0])
-			for i in range(1, len(self.numSig)):
-				avggauss = self.multiply(avggauss, (self.numC[i], self.numMu[i], self.numSig[i]))
-			guess = avggauss[1]
-		
-		else:
-			totalweighting = 0
-			maxDen = (0, None, None)
-			for i in range(len(self.denSig)):
-				if maxDen[2] == None or self.denSig[i] > maxDen[2]:
-					maxDen = (self.denC[i], self.denMu[i], self.denSig[i])
-			for i in range(len(self.numSig)):
-				if maxDen[2] != None and self.numSig[i] != None:
-					weighting = self.numC[i] * (self.numSig[i] / maxDen[2]) ** 2
-				else:
-					weighting = 1
-				if self.numSig[i] != maxDen[2] and maxDen[2] != None:
-					if self.numSig[i] == None:
-						localmin = maxDen[1]
-					else:
-						localmin = Gauss.minGaussRatio(self.numMu[i],maxDen[1],self.numSig[i],maxDen[2])
-				else:
-					localmin = 0
-				guess += weighting * localmin
-				totalweighting += weighting
-			if totalweighting != 0:
-				guess = guess / totalweighting
+		totalweighting = 0
+		maxDen = (0, 0, 0)
+		for i in range(len(self.denSig)):
+			# choose term in the denominator with the highest sigma to represent the entire denominator
+			# if there is a constant value, use that
+			if (self.denSig[i] == None and self.denC[i] > maxDen[0]) or \
+			   (maxDen[2] != None and self.denSig[i] > maxDen[2]):
+				maxDen = (self.denC[i], self.denMu[i], self.denSig[i])
+		for i in range(len(self.numSig)):
+			if maxDen[2] != None and self.numSig[i] != None: # if Gauss / Gauss
+				weighting = self.numC[i] * (self.numSig[i] / maxDen[2]) ** 2
+			elif maxDen[2] != None: # if Constant / Gauss
+				weighting = self.numC[i] * 30
+			else: # if Gauss / Constant
+				weighting = self.numC[i] * exp(-5*self.numSig[i]) # 1 when sigma=0, 0 when sigma=inf
+			if self.numSig[i] != maxDen[2] and maxDen[2] != None:
+				if self.numSig[i] == None: # if Constant / Gauss
+					localmin = maxDen[1]
+				else: # if Gauss / Gauss
+					localmin = Gauss.minGaussRatio(self.numMu[i],maxDen[1],self.numSig[i],maxDen[2])
+			elif maxDen[2] == None: # if Gauss / Constant
+				localmin = self.numMu[i]
+			else: # if Constant (from cancellation)
+				localmin = guess / totalweighting # no effect
+			guess += weighting * localmin
+			totalweighting += weighting
+		guess = guess / totalweighting
+		guess = float(guess)
 
 		if approx:
 			return guess
-		return self.criticalPoint(guess)
+		return self.localmin(guess,check)
 
 
-	def criticalPoint(self,x):
+	def localmin(self,x,check=False):
 		# The critical point closest to x
 		# This doesn't guarantee a minimum
 		# import time; starttime = time.time()
 		eqn = lambdify([Gauss.x], self.evaluate().diff(Gauss.x), "mpmath")
-		root = findroot(eqn,x,solver="anewton")
+		if check:
+			# returns None if no minimum is found
+			# Specify range to verify derivative going from negative to positive
+			offset = 1
+			factor = 2
+			maxiter = 5
+			if eqn(x) < 0:
+				iterations = 0
+				while eqn(x + offset) < 0:
+					if iterations > maxiter:
+						return None
+					offset *= factor
+					iterations += 1
+				root = findroot(eqn,(x,x+offset),solver="pegasus")
+			else:
+				iterations = 0
+				while eqn(x - offset) > 0:
+					if iterations > maxiter:
+						return None
+					offset *= factor
+					iterations += 1
+				root = findroot(eqn,(x-offset,x),solver="pegasus")
+			# Sanity check that it worked
+			if eqn(root) > eqn(root+0.0001):
+				return None
+		else:
+			root = findroot(eqn,x,solver="anewton")
 		# print (time.time() - starttime)
 		return float(root)
 
@@ -268,14 +294,22 @@ class Gauss:
 		return self.evaluate(x)
 
 
-	def plot(self):
-		plot(self.evaluate(Gauss.x), ylim=(-1,10))
+	def plot(self,ylim=None):
+		plot(self.evaluate(Gauss.x), ylim=ylim)
 
 
 
 if __name__ == '__main__':
-	g1 = Gauss(mu=[0],sigma=[1])
-	g2 = Gauss(mu=[1],sigma=[2])
-	g3 = g2 / g1
-	g4 = Gauss(mu=0,sigma=1) + Gauss(mu=3,sigma=1) + Gauss(mu=6,sigma=2)
+	# g1 = Gauss(mu=[0],sigma=[1])
+	# g2 = Gauss(mu=[1],sigma=[2])
+	# gratio = g2 / g1
+	init_printing()
+
+	gadd = Gauss(mu=0,sigma=1) + Gauss(mu=3,sigma=1) + Gauss(mu=6,sigma=2)
+	print("Equation: ", pretty(gadd.evaluate(), use_unicode=True))
+	print("Min: ", gadd.min())
+	print("Min Approx", gadd.min(approx=True))
+	print("Min Checking", gadd.min(check=True))
+	gadd.plot()
+
 	import code; code.interact(local=locals())
