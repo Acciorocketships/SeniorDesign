@@ -153,8 +153,8 @@ class Gauss:
 		return Gauss(c=numC,mu=numMu,sigma=numSig,invc=denC,invmu=denMu,invsigma=denSig)
 
 
-	def __rmul__(self,other):
-		return self.__mul__(other)
+	def __radd__(self,other):
+		return self.__add__(other)
 
 
 	def __mul__(self,other):
@@ -173,6 +173,9 @@ class Gauss:
 		denSig = bd[2]
 
 		return Gauss(c=numC,mu=numMu,sigma=numSig,invc=denC,invmu=denMu,invsigma=denSig)
+
+	def __rmul__(self,other):
+		return self.__mul__(other)
 
 
 	def multiplyPoly(self,poly0,poly1):
