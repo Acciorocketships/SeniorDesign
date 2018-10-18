@@ -309,10 +309,10 @@ if __name__ == '__main__':
 	init_printing()
 
 	gadd = Gauss(mu=0,sigma=1) + Gauss(mu=3,sigma=1) + Gauss(mu=6,sigma=2)
-	print("Equation: ", pretty(gadd.evaluate(), use_unicode=True))
+	x = Gauss.x
+	# print("Equation: ", pretty(gadd.evaluate(), use_unicode=True))
 	print("Min: ", gadd.min())
 	print("Min Approx", gadd.min(approx=True))
 	print("Min Checking", gadd.min(check=True))
-	gadd.plot()
 
 	import code; code.interact(local=locals())

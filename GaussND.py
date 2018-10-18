@@ -5,7 +5,7 @@ import numpy as np
 
 class GaussND:
 
-	def __init__(self,numC=[1],numN=[None],denC=[1],denN=[None]):
+	def __init__(self,numN=[None],numC=[1],denN=[None],denC=[1]):
 		# N is a list of tuples (mu, cov)
 		self.numC = numC if isinstance(numC,list) else [numC]
 		self.numN = numN if isinstance(numN,list) else [numN]
@@ -49,7 +49,7 @@ class GaussND:
 			C1 = [1 for i in range(len(N1))]
 		for i0 in range(len(N0)):
 			for i1 in range(len(N1)):
-				i = i0*len(N0) + i1
+				i = i0*len(N1) + i1
 				N[i] = self.multiply(N0[i0],N1[i1])
 				C[i] = C0[i0] * C1[i1]
 		return (N, C)
@@ -87,9 +87,29 @@ class GaussND:
 			return (np.all(N0.mean==N1.mean) and np.all(N0.cov==N1.cov))
 
 
-	def plot(self):
-		# https://stackoverflow.com/questions/25286811/how-to-plot-a-3d-density-map-in-python-with-matplotlib
-		# TODO
+	def plot(self,lim=None):
+		from mayavi import mlab
+		if lim is None:
+			# Calculate limits
+			mus = np.concatenate(tuple([[N.mean] for N in filter(lambda N: N is not None, self.numN+self.denN)]), axis=0)
+			maxs = np.amax(mus,axis=0) + 1
+			mins = np.amin(mus,axis=0) - 1
+			s = np.amax(maxs-mins) / 2
+			mid = (maxs + mins) / 2
+			lim = [[mid[i]-1.2*s, mid[i]+1.2*s] for i in range(maxs.shape[0])]
+		if len(lim) == 3:
+			# Evaluate
+			xi,yi,zi = np.mgrid[lim[0][0]:lim[0][1]:50j, lim[1][0]:lim[1][1]:50j, lim[2][0]:lim[2][1]:50j]
+			coords = np.vstack([item.ravel() for item in [xi, yi, zi]])
+			density = self.evaluate(coords.T).reshape(xi.shape)
+			# Plot scatter with mayavi
+			figure = mlab.figure('DensityPlot')
+			grid = mlab.pipeline.scalar_field(xi, yi, zi, density)
+			minval = 0
+			maxval = density.max()
+			mlab.pipeline.volume(grid, vmin=minval, vmax=minval + .5*(maxval-minval))
+			mlab.axes()
+			mlab.show()
 		pass
 
 
@@ -134,12 +154,24 @@ class GaussND:
 		return self.__mul__(other)
 
 	def __truediv__(self,other):
-		# TODO
-		pass
+		if not isinstance(other,GaussND):
+			other = GaussND(numC=other)
+		numC = list(other.numC)
+		numN = list(other.numN)
+		denC = list(other.denC)
+		denN = list(other.denN)
+		invother = GaussND(numC=denC,numN=denN,denC=numC,denN=numN)
+		return self.__mul__(invother)
 
 	def __rtruediv__(self,other):
-		# TODO
-		pass
+		if not isinstance(other,GaussND):
+			other = GaussND(numC=other)
+		numC = list(self.numC)
+		numN = list(self.numN)
+		denC = list(self.denC)
+		denN = list(self.denN)
+		invself = GaussND(numC=denC,numN=denN,denC=numC,denN=numN)
+		return invself.__mul__(other)
 
 		
 
@@ -151,15 +183,20 @@ if __name__ == '__main__':
 	# https://docs.scipy.org/doc/scipy-0.18.1/reference/optimize.html
 
 	mu0 = np.array([[0,0,0]]).T
-	cov0 = np.identity(3)
+	cov0 = 0.1*np.identity(3)
 	g0 = GaussND(numN=(mu0,cov0))
 
 	mu1 = np.array([[1,0,0]]).T
-	cov1 = np.array([[1,0,0],[0,2,0],[0,0,1]])
+	cov1 = 0.1*np.array([[1,0,0],[0,1,0],[0,0,1]])
 	g1 = GaussND(numN=(mu1,cov1))
 
-	g2 = g0 + g1
+	mu2 = np.array([[0.5,0,0]]).T
+	cov2 = 0.14*np.identity(3)
+	g2 = 10*GaussND(numN=(mu2,cov2))
+
+	g3 = (g0 + g1)
 	x = np.array([0,0,0])
+	# g3.plot()
 
 	import code; code.interact(local=locals())
 
