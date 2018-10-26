@@ -64,7 +64,7 @@ class Object:
 			newvel = np.array([cos(theta + dtheta), sin(theta + dtheta), 0,])
 			yield newvel
 
-		yield (np.array([0,0,0]), dtheta)
+		yield np.array([0,0,0])
 
 
 	def pathpos(self,t):
@@ -88,7 +88,8 @@ class Object:
 
 		while True:
 			J, pathJ, t, pos, vel = frontier.get()
-			for nextvel, dtheta in self.nextvel(vel):
+			for nextvel in self.nextvel(vel):
 				nextpathJ = pathJ + np.linalg.norm(nextvel) * tRes
 				nextpos = pos + nextvel * tRes
+
 				# TODO

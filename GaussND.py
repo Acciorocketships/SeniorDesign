@@ -1,4 +1,5 @@
 from scipy.stats import multivariate_normal, _multivariate
+from scipy.optimize import fmin, fmin_slsqp
 from time import time
 import numpy as np
 
@@ -17,6 +18,24 @@ class GaussND:
 		for i, term in enumerate(self.denN):
 			if term is not None and not isinstance(term,_multivariate.multivariate_normal_frozen):
 				self.denN[i] = multivariate_normal(mean=np.reshape(term[0],(-1,)),cov=term[1])
+
+
+	def min(self,x0=None,eqcons=[],ieqcons=[]):
+		# eqcons (equality constrains) is a list of functions such that f(x)=0
+		# ieqcons (inequality constraints) is a list of fucntions such that f(x)>=0
+		# x0 is the starting point, default [0,0,0]
+		if x0 is None:
+			dim = 0
+			for term in self.numN + self.denN:
+				if term is not None:
+					dim = term.mean.shape[0]
+					break
+			x0 = np.zeros((dim,))
+		if len(eqcons) != 0 or len(ieqcons) != 0:
+			m = fmin_slsqp(self.evaluate,x0,eqcons=eqcons,ieqcons=ieqcons,iprint=0)
+		else:
+			m = fmin(self.evaluate,x0,iprint=0)
+		return m
 
 
 	def __mul__(self,other):
@@ -183,18 +202,18 @@ if __name__ == '__main__':
 	# https://docs.scipy.org/doc/scipy-0.18.1/reference/optimize.html
 
 	mu0 = np.array([[0,0,0]]).T
-	cov0 = 0.1*np.identity(3)
+	cov0 = 0.2*np.identity(3)
 	g0 = GaussND(numN=(mu0,cov0))
 
 	mu1 = np.array([[1,0,0]]).T
 	cov1 = 0.1*np.array([[1,0,0],[0,1,0],[0,0,1]])
 	g1 = GaussND(numN=(mu1,cov1))
 
-	mu2 = np.array([[0.5,0,0]]).T
-	cov2 = 0.14*np.identity(3)
+	mu2 = np.array([[-0.5,0,0]]).T
+	cov2 = 0.1*np.identity(3)
 	g2 = 10*GaussND(numN=(mu2,cov2))
 
-	g3 = (g0 + g1)
+	g3 = (g2 + g1) / g0
 	x = np.array([0,0,0])
 	# g3.plot()
 
