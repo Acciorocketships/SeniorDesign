@@ -215,9 +215,9 @@ if __name__ == '__main__':
 
 	g3 = (g2 + g1) / g0
 	x = np.array([0,0,0])
-	# g3.plot()
+	g3.plot()
 
-	import code; code.interact(local=locals())
+	# import code; code.interact(local=locals())
 
 
 	
