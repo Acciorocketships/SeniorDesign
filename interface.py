@@ -84,7 +84,7 @@ class Object:
 		# Other Attributes
 		self.type = 0 # 0 for moving, 1 for intelligent
 		self.classification = None # classification from RCNN
-		self.gaussian = 100*GaussND(numN=(np.array([[0,0,0]]).T,2*np.identity(3)))
+		self.gaussian = 100*GaussND(numN=(np.array([[0,0,0]]).T,3*np.identity(3)))
 
 		# Internal variables
 		self.path = None

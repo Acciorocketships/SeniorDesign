@@ -60,6 +60,9 @@ dx = eoms[9].diff(t).subs(dxBody.diff(t),d2xBody).subs(dyBody.diff(t),d2yBody).s
 dy = eoms[10].diff(t).subs(dxBody.diff(t),d2xBody).subs(dyBody.diff(t),d2yBody).subs(dzBody.diff(t),d2zBody)
 dz = eoms[11].diff(t).subs(dxBody.diff(t),d2xBody).subs(dyBody.diff(t),d2yBody).subs(dzBody.diff(t),d2zBody)
 
+P = solve(d2xBody,uPitch)
+R = solve(d2yBody,uRoll)
+
 print('\ndx = ')
 pprint(dx)
 print('\ndy = ')

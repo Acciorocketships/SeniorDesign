@@ -129,7 +129,6 @@ class GaussND:
 			mlab.pipeline.volume(grid, vmin=minval, vmax=minval + .5*(maxval-minval))
 			mlab.axes()
 			mlab.show()
-		pass
 
 
 	def __getitem__(self,x):
