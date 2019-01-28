@@ -32,10 +32,10 @@ class GaussND:
 					break
 			x0 = np.zeros((dim,))
 		if len(eqcons) != 0 or len(ieqcons) != 0:
-			m = fmin_slsqp(self.evaluate,x0,eqcons=eqcons,ieqcons=ieqcons,iprint=0)
+			xopt = fmin_slsqp(self.evaluate,x0,eqcons=eqcons,ieqcons=ieqcons,iprint=0)
 		else:
-			m = fmin(self.evaluate,x0,iprint=0)
-		return m
+			xopt = fmin(self.evaluate,x0,disp=False)
+		return xopt
 
 
 	def __mul__(self,other):
@@ -214,9 +214,9 @@ if __name__ == '__main__':
 
 	g3 = (g2 + g1) / g0
 	x = np.array([0,0,0])
-	g3.plot()
+	#g3.plot()
 
-	# import code; code.interact(local=locals())
+	import code; code.interact(local=locals())
 
 
 	

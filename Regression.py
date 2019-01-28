@@ -13,12 +13,24 @@ class Regressor:
 
 
 	def set(self,pos,val,radius=1):
+		pos = np.array(pos)
 		self.dim = pos.size
 		currval = self.eval(pos)
 		cov = radius * np.eye(pos.size)
 		gaussian = GaussND(numN=(pos,cov))
 		newval = gaussian[pos]
 		gaussian *= (val-currval) / newval
+		self.add(gaussian)
+
+
+	def add(self,pos,val,radius=1):
+		pos = np.array(pos)
+		self.dim = pos.size
+		currval = self.eval(pos)
+		cov = radius * np.eye(pos.size)
+		gaussian = GaussND(numN=(pos,cov))
+		newval = gaussian[pos]
+		gaussian *= val / newval
 		self.add(gaussian)
 			
 
@@ -62,6 +74,22 @@ class Regressor:
 		return sum(map(lambda f: f[pos], gaussians))
 
 
+	def equation(self,pos):
+		pos = np.array(pos)
+		eqn = 0
+		curr = self.map
+		for level in range(0,self.levels):
+			key = self.tohash(self.discretize(pos, self.stepsize(level)))
+			if key not in curr:
+				break
+			for term in curr[key][0]:
+				eqn += term
+			curr = curr[key][1]
+		return eqn
+
+
+
+
 	# Finds the corners that circumscribe a position at a given level
 	# Given a corner, this will return the centers of the adjacent cells
 	def corners(self,middle,h):
@@ -103,16 +131,29 @@ class Regressor:
 	def __add__(self,term):	
 		pos = term[0]
 		val = term[1]
-		currval = self.eval(pos)
 		if len(term) > 2:
-			self.set(pos,currval+val,radius=term[2])
+			self.add(pos,val,radius=term[2])
 		else:
-			self.set(pos,currval+val)
+			self.add(pos,val)
 		return self
 
 
 	def __radd__(self,term):
 		return self.__add__(term)
+
+
+	def __mul__(self,term):	
+		pos = term[0]
+		val = term[1]
+		if len(term) > 2:
+			self.set(pos,val,radius=term[2])
+		else:
+			self.set(pos,val)
+		return self
+
+
+	def __rmul__(self,term):
+		return self.__mul__(term)
 
 
 	def plot(self,lim=[[-5,5],[-5,5],[-5,5]]):
@@ -161,12 +202,15 @@ class Regressor:
 
 def main():
 	r = Regressor()
-	p1 = np.array([2,0,0])
-	p2 = np.array([-3,0,0])
-	r = r + (p1,1,1)
-	r = r + (p2,2,0.5)
-	r.plot()
-
+	r += ([2,0,0],1,1)           # x, f(x), radius
+	r += ([-3,0,0],-2,0.5)		 # x, f(x), radius (negative will not be displayed on plot)
+	r += ([-2,1,1],1,0.5)		 # x, f(x), radius
+	eq = r.equation([0,0,0])	 # analytical equation in the vicinity of [0,0,0]
+	xopt = eq.min([0,0,0])	     # local minimum in the vicinity of [0,0,0] (you can also add constraints)
+	print("argmin(r) = ", xopt)			# Sure engouh, xopt = [-3,0,0], the location where we set the function to -2
+	print("min(r) = ", eq[xopt])        # The analytical equation can be evaluated
+	print("r([0,0,0]) = ", r[[0,0,0]])  # Or the regressor can be evaluated directly
+	r.plot()					# Plots the R3 -> R1 function
 
 if __name__ == '__main__':
 	main()
