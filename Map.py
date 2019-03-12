@@ -15,11 +15,6 @@ from matplotlib.widgets import Slider
 # https://nlesc.github.io/python-pcl/
 
 
-
-
-
-
-
 class Map:
 
 	def __init__(self):
@@ -78,9 +73,6 @@ class Map:
 			self.axes[i].set_ydata(pos[1])
 			self.axes[i].set_xdata(pos[0])
 		self.fig.canvas.draw_idle()
-
-
-
 
 
 
@@ -159,21 +151,23 @@ class Object:
 	def nextpos(self,pos,step):
 		for dx in [-step, 0, step]:
 			for dy in [-step, 0, step]:
-				#for dz in [-step, 0, step]:
-				dz = 0
-				yield pos + np.array([[dx],[dy],[dz]])
+				for dz in [-step, 0, step]:
+					dz = 0
+					yield pos + np.array([[dx],[dy],[dz]])
 
 
-	def pathplan(self,T=3,destination=None,returnall=False):
+	def pathplan(self,destination=None,T=1,dt=None,returnall=False):
 
 		# Initialization
 		if destination is None:
 			destination = self.extrapolate(T)
 		frontier = PriorityQueue()
-		maxsteps = 100000 #3*int(T / self.tRes)
+		maxsteps = 100000
 		visited = {}
 		self.speed = np.linalg.norm(self.velocity)
-		step = round(0.1 * self.speed, 2)
+		if dt is not None:
+			self.tRes = dt
+		step = max(round(self.tRes * self.speed, 2), 0.01)
 
 		# Starting point
 		ties = count()
@@ -244,7 +238,7 @@ class Object:
 		self.path = path
 
 		if returnall:
-			return (path,dist,J,prox,togo,t)
+			return (path,t,dist,J,prox,togo)
 		else:
 			return path
 
