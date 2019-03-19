@@ -1,6 +1,5 @@
-
-# Created by https://www.gitignore.io/api/macos,linux,python,windows
-# Edit at https://www.gitignore.io/?templates=macos,linux,python,windows
+# Created by https://www.gitignore.io/api/vim,macos,linux,python,windows
+# Edit at https://www.gitignore.io/?templates=vim,macos,linux,python,windows
 
 ### Linux ###
 *~
@@ -166,6 +165,24 @@ dmypy.json
 ### Python Patch ###
 .venv/
 
+### Vim ###
+# Swap
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Session
+Session.vim
+
+# Temporary
+.netrwhist
+# Auto-generated tag files
+tags
+# Persistent undo
+[._]*.un~
+
 ### Windows ###
 # Windows thumbnail cache files
 Thumbs.db
@@ -191,4 +208,5 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-# End of https://www.gitignore.io/api/macos,linux,python,windows
+# End of https://www.gitignore.io/api/vim,macos,linux,python,windows
+
