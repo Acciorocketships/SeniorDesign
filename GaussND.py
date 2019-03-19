@@ -84,8 +84,8 @@ class GaussND:
 		else: # Multiply 2 Gausians
 		# https://math.stackexchange.com/questions/157172/product-of-two-multivariate-gaussians-distributions
 			inv = np.linalg.inv(N0.cov + N1.cov)
-			cov = N0.cov @ inv @ N1.cov
-			mu = (N1.cov @ inv @ N0.mean) + (N0.cov @ inv @ N1.mean)
+			cov = N0.cov.matmul(inv).matmul(N1.cov)
+			mu = (N1.cov.matmul(inv).matmul(N0.mean)) + (N0.cov.matmul(inv).matmul(N1.mean))
 			N = multivariate_normal(mean=mu,cov=cov)
 		return N
 
