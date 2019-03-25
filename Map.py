@@ -87,6 +87,7 @@ class Object:
 		self.position = np.zeros((3,1))
 		self.velocity = np.zeros((3,1))
 		self.acceleration = np.zeros((3,1))
+		self.speed = 1
 
 		# Other Attributes
 		self.type = 0 # 0 for moving, 1 for intelligent
@@ -94,15 +95,33 @@ class Object:
 		self.gaussian = 30*GaussND(numN=(np.array([[0,0,0]]).T,1*np.identity(3)))
 
 		# Pathfinding Weights
-		self.Ctime = 0.5
+		self.Cheur = 1
+		self.Ctime = 2
 		self.Cprox = 2
-		self.Cdist = 1
+		self.Cdist = 0.1
+		self.Cdir = 0.2
+
 
 		# Internal variables
 		self.path = None
 
 		# Options
 		self.tRes = 0.05
+
+
+	def setPos(self,pos):
+		for i in range(3):
+			self.position[i,0] = pos[i]
+
+
+	def setVel(self,vel):
+		for i in range(3):
+			self.velocity[i,0] = vel[i]
+
+
+	def selAcc(self,acc):
+		for i in range(3):
+			self.acceleration[i,0] = acc[i]
 
 
 	# The cost associated with being withing a given proximity of the object
@@ -152,21 +171,22 @@ class Object:
 		for dx in [-step, 0, step]:
 			for dy in [-step, 0, step]:
 				for dz in [-step, 0, step]:
-					dz = 0
 					yield pos + np.array([[dx],[dy],[dz]])
 
 
-	def pathplan(self,destination=None,T=1,dt=None,returnall=False):
+	def pathplan(self,destination=None,dt=0.1,returnlevel=1):
 
 		# Initialization
 		if destination is None:
-			destination = self.extrapolate(T)
+			destination = self.extrapolate(3)
 		frontier = PriorityQueue()
 		maxsteps = 100000
 		visited = {}
-		self.speed = np.linalg.norm(self.velocity)
-		if dt is not None:
-			self.tRes = dt
+		if np.linalg.norm(self.velocity) != 0:
+			self.speed = np.linalg.norm(self.velocity)
+		elif self.speed == 0:
+			self.speed = 1
+		self.tRes = dt
 		step = max(round(self.tRes * self.speed, 2), 0.01)
 
 		# Starting point
@@ -197,31 +217,42 @@ class Object:
 				nextdist = data['dist'] + self.distance(nextpos,pos)
 				nextProx = self.m.proxCost(pos=nextpos,t=nextt,ignore=self)
 				heuristic = self.heuristic(nextpos,nextt,destination)
-				nextJ = heuristic + self.Cdist * nextdist + self.Cprox * nextProx + self.Ctime * nextt
+
+				vel = (nextpos-pos)
+				lastvel = (pos - data['prev']['pos']) if data['prev'] != None else self.velocity / self.speed * np.linalg.norm(vel)
+				mag = np.linalg.norm(vel) * np.linalg.norm(lastvel)
+				dirchange = (1 - vel.T.dot(lastvel)[0][0] / mag) if mag != 0 else 1
+
+				nextJ = self.Cheur * heuristic + self.Cdist * nextdist + self.Cprox * nextProx + self.Ctime * heuristic * nextt + self.Cdir * dirchange
 				nextdata = {'pos': nextpos, 't': nextt,'togo': heuristic, 'dist': nextdist, 'J': nextJ, 'prox': nextProx, 'prev': data}
 				frontier.put((nextJ, next(ties), nextdata))
 		
 		# Convert Linked List to NP Array
 		curr = data
 		path = []
-		if returnall:
+		if returnlevel > 0:
+			t = []
+		if returnlevel > 1:
 			dist = []
 			J = []
 			prox = []
-			t = []
 			togo = []
 		while not np.all(curr == None):
 			path.append(curr['pos'])
-			if returnall:
+			if returnlevel > 0:
+				t.append(curr["t"])
+			if returnlevel > 1:
 				dist.append(curr['dist'])
 				J.append(curr["J"])
 				prox.append(curr["prox"])
-				t.append(curr["t"])
 				togo.append(curr["togo"])
 			curr = curr['prev']
 		path.reverse()
 		path = np.array(path)[:,:,0]
-		if returnall:
+		if returnlevel > 0:
+			t.reverse()
+			t = np.array(t)
+		if returnlevel > 1:
 			dist.reverse()
 			dist = np.array(dist)
 			J.reverse()
@@ -230,15 +261,15 @@ class Object:
 			prox.reverse()
 			prox[0] = prox[1]
 			prox = np.array(prox)
-			t.reverse()
-			t = np.array(t)
 			togo.reverse()
 			togo = np.array(togo)
 		
 		self.path = path
 
-		if returnall:
+		if returnlevel > 1:
 			return (path,t,dist,J,prox,togo)
+		elif returnlevel > 0:
+			return (path,t)
 		else:
 			return path
 
@@ -286,12 +317,12 @@ if __name__ == '__main__':
 
 	o = Object(m)
 	o.type = 1
-	o.velocity = np.array([[-1,2,0]]).T
+	o.velocity = np.array([[2,0,0]]).T
 	o.position = np.array([[0,0,0]]).T
 	m.objects.add(o)
 
-	dest = np.array([[0,3,0]]).T
-	path, dist, J, prox, togo, t = o.pathplan(destination=dest,returnall=True)
+	dest = np.array([[1,1.5,0]]).T
+	path, t, dist, J, prox, togo = o.pathplan(destination=dest,dt=0.1,returnlevel=2)
 
 	m.plot(T=t[-1],lim=[-3,3,-1,6])
 
@@ -310,8 +341,8 @@ if __name__ == '__main__':
 	plt.title("Dist to Go")
 	plt.show()
 
-	m.plotObects(np.linspace(0,7,30))
+	m.plotObects(t)
 	plt.plot(path[:,0],path[:,1])
-	plt.xlim(-3,3)
-	plt.ylim(-2,4)
+	plt.xlim(-4,4)
+	plt.ylim(-4,4)
 	plt.show()

@@ -3,10 +3,11 @@ import numpy as np
 from Map import *
 
 
+
 class Planner:
 
 
-	def __init__(self, map=None):
+	def __init__(self, map=Map()):
 
 		self.map = map
 
@@ -32,17 +33,30 @@ class Planner:
 		self.t = np.array([])
 
 
+
+
 	def pathplan(self):
 		
 		pass
 
 
+
+
 	def astar(self):
 
 		o = Object(self.map)
-		pathdata = o.pathplan(destination=self.targetpos,T=5,dt=0.01,returnall=True)
+		o.setPos(self.pos)
+		o.setVel([0,-1,0]) # Desired Average Speed
+		pathdata = o.pathplan(destination=self.targetpos,dt=0.1,returnlevel=1)
 		self.roughpath = pathdata[0]
 		self.t = pathdata[1]
+
+
+
+	def spline(self):
+
+		pass
+
 
 
 	def mpc(self):
@@ -176,6 +190,10 @@ class Planner:
 
 
 
+def calcHermite(path):
+
+	pass
+
 
 
 if __name__ == '__main__':
@@ -183,7 +201,8 @@ if __name__ == '__main__':
 	planner = Planner()
 	planner.targetpos = np.array([2,0,0])
 	planner.vel = np.array([0,1,0])
-	planner.mpc()
+	planner.astar()
+	print(planner.roughpath)
 
 
 
