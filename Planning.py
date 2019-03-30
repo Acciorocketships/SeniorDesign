@@ -1,5 +1,7 @@
 from gekko import GEKKO as solver
 import numpy as np
+from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from Map import *
 
 
@@ -45,11 +47,9 @@ class Planner:
 	def astar(self):
 
 		o = Object(self.map)
-		o.setPos(self.pos)
-		o.setVel([0,-1,0]) # Desired Average Speed
-		pathdata = o.pathplan(destination=self.targetpos,dt=0.1,returnlevel=1)
-		self.roughpath = pathdata[0]
-		self.t = pathdata[1]
+		o.position = self.pos
+		o.speed = 1
+		self.roughpath, self.t = o.pathplan(destination=self.targetpos,dt=0.1,returnlevel=1)
 
 
 
@@ -84,6 +84,7 @@ class Planner:
 		for i in range(4):
 			W[i].value = self.propangvel[i]
 			W[i].STATUS = 1
+			# Add DCOST (penalization for change) and DMAX (max change per step)
 
 		# Thrust, Pitch, Roll, Yaw from Control Inputs
 		U1 = s.Intermediate(b * (W[0]**2 + W[1]**2 + W[2]**2 + W[3]**3), name="Thrust Control")
@@ -115,13 +116,14 @@ class Planner:
 
 		if self.t.size == 0:
 			# Linear path to goal if none already
-			self.t = np.linspace(0,5,21)
-			self.roughpath = np.array(self.pos.reshape(3,1) + self.t*(self.targetpos-self.pos).reshape(3,1))
+			self.t = np.linspace(0,3,100)
+			self.roughpath = np.array(self.pos.reshape(1,3) + self.t*(self.targetpos-self.pos).reshape(1,3))
+		roughpath = self.roughpath.T
 
 		s.time = self.t
-		x = s.CV(value=self.roughpath[0,:], name="X")
-		y = s.CV(value=self.roughpath[1,:], name="Y")
-		z = s.CV(value=self.roughpath[2,:], name="Z")
+		x = s.CV(value=roughpath[0,:], name="X")
+		y = s.CV(value=roughpath[1,:], name="Y")
+		z = s.CV(value=roughpath[2,:], name="Z")
 
 		x.STATUS = 1
 		y.STATUS = 1
@@ -155,54 +157,95 @@ class Planner:
 
 
 
-		## Fix Target State ##
-
-		# Fix Destination
-		#s.fix(x,s.time.size-1,x[-1])
-		#s.fix(y,s.time.size-1,y[-1])
-		#s.fix(z,s.time.size-1,z[-1])
-
-		# Fix Target Velocity
-		# if self.targetvel != None:
-		# 	s.fix(vx,s.time.size-1,vx[-1])
-		# 	s.fix(vy,s.time.size-1,vy[-1])
-		# 	s.fix(vz,s.time.size-1,vz[-1])
-
-		# # Fix Target Rotation
-		# if self.targetrot != None:
-		# 	s.fix(phi,s.time.size-1,phi[-1])
-		# 	s.fix(theta,s.time.size-1,theta[-1])
-		# 	s.fix(psi,s.time.size-1,psi[-1])
-
-
-
 		## Solve ##
 
 		s.options.CV_TYPE = 1 # squared error
 		s.options.IMODE = 6 # dynamic control
 		s.options.SOLVER = 3
-		s.options.OTOL = 1000
-		s.options.RTOL = 1E-6
+		s.options.MAX_ITER = 10000
 		s.solve(disp=True)
 
-		import code; code.interact(local=locals())
+		self.path = np.array([x,y,z]).T
 
 
 
 
-def calcHermite(path):
+def calcHermite(p, v0=np.zeros((3,1)), vT=np.zeros((3,1)), a0=np.zeros((3,1)), aT=np.zeros((3,1))):
 
-	pass
+	N = p.shape[0]
+	A = np.zeros((4*N,4*N))
+	b = np.zeros((4*N,3))
+
+	for i in range(N-1):
+
+		A[4*i,4*i+1] = 1
+		A[4*i,4*(i+1)] = -1
+
+		A[4*i+1,4*i+3] = 1
+		A[4*i+1,4*(i+1)+2] = -1
+
+		A[4*i+2,4*i] = 12
+		A[4*i+2,4*i+1] = -12
+		A[4*i+2,4*i+2] = 6
+		A[4*i+2,4*i+3] = 6
+
+		A[4*i+3,4*i] = -24
+		A[4*i+3,4*i+1] = 24
+		A[4*i+3,4*i+2] = 60
+		A[4*i+3,4*i+3] = -60
+		b[4*i+3,:] = 720*(p[i+1,:] - p[i,:])
+
+	A[4*(N-1),0] = 1
+	b[4*(N-1),:] = v0.reshape((1,3))
+
+	A[4*(N-1)+1,4*(N-1)] = 1
+	b[4*(N-1)+1,:] = vT.reshape((1,3))
+
+	A[4*(N-1)+2,2] = 1
+	b[4*(N-1)+2,:] = a0.reshape((1,3))
+
+	A[4*(N-1)+3,4*(N-1)+3] = 1
+	b[4*(N-1)+3,:] = aT.reshape((1,3))
+
+	c = np.linalg.solve(A,b)
+
+	v = np.zeros((N,3))
+	a = np.zeros((N,3))
+	for i in range(N):
+		v[i,:] = c[4*i,:]
+		a[i,:] = c[4*i+2,:]
+	v[N-1,:] = c[4*(N-1)+1,:]
+	a[N-1,:] = c[4*(N-1)+3,:]
+
+	return (p,v,a)
 
 
-
-if __name__ == '__main__':
-	
+def test_astar():
 	planner = Planner()
 	planner.targetpos = np.array([2,0,0])
 	planner.vel = np.array([0,1,0])
 	planner.astar()
-	print(planner.roughpath)
+	plotPaths(planner.roughpath)
+
+
+def test_calcHermite():
+	path = np.array([[0,0,0],[1,0,0],[1.5,1,0],[1,1.5,0]])
+	p, v, a = calcHermite(path)
+	plotPaths(path)
+
+
+def test_mpc():
+	planner = Planner()
+	planner.targetpos = np.array([2,0,0])
+	planner.vel = np.array([0,1,0])
+	planner.astar()
+	planner.mpc()
+	plotPaths((planner.roughpath,planner.path))
+
+
+if __name__ == '__main__':
+	
+	test_calcHermite()
 
 
 

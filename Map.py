@@ -11,6 +11,8 @@ except:
 	from queue import PriorityQueue # Python 3
 from GaussND import *
 from matplotlib.widgets import Slider
+from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # https://nlesc.github.io/python-pcl/
 
@@ -29,8 +31,7 @@ class Map:
 		cost = 0
 		for obj in self.objects:
 			if obj != ignore:
-				displacement = pos - obj.pos(t)
-				cost += obj.proxCost(displacement)
+				cost += obj.proxCost(pos=pos,t=t)
 		return cost
 
 
@@ -38,15 +39,18 @@ class Map:
 		if not isinstance(t, np.ndarray):
 			t = np.array([t])
 		t = np.reshape(t,(-1,))
+		fig = plt.figure()
+		ax = fig.add_subplot(111, projection='3d')
 		for obj in self.objects:
 			if obj.type == 0:
 				color = np.random.rand(3)
 				for i in range(t.size):
 					pos = obj.pos(t[i])
-					plt.plot(pos[0], pos[1], 'o', c=color, alpha=(i+1)/t.size)
+					ax.plot([pos[0]], [pos[1]], [pos[2]], 'o', c=color, alpha=(i+1)/t.size)
 
 
-	def plot(self,T=3,lim=[-5,5,-5,5]):
+	def plot(self,T=3,lim=[-5,5,-5,5],plane=[0,1]):
+		self.plane = plane
 		self.fig, ax = plt.subplots()
 		plt.xlim(lim[0],lim[1])
 		plt.ylim(lim[2],lim[3])
@@ -56,11 +60,11 @@ class Map:
 		for i, obj in enumerate(self.objects):
 			pos = obj.pos(0)
 			if obj.type == 0:
-				self.axes[i] = plt.plot(pos[0], pos[1], 'o', c=colors[i])[0]
+				self.axes[i] = plt.plot(pos[plane[0]], pos[plane[1]], 'o', c=colors[i])[0]
 			else:
-				self.axes[i] = plt.plot(pos[0], pos[1], '*', c=colors[i])[0]
+				self.axes[i] = plt.plot(pos[plane[0]], pos[plane[1]], '*', c=colors[i])[0]
 				dest = obj.pos(T)
-				plt.plot(dest[0],dest[1],'k.')
+				plt.plot(dest[plane[0]],dest[plane[1]],'k.')
 		axt = plt.axes([0.125, 0.1, 0.775, 0.03])
 		tslider = Slider(axt, 'Time', 0, T, valinit=0)
 		tslider.on_changed(self.update)
@@ -70,9 +74,11 @@ class Map:
 	def update(self,t):
 		for i, obj in enumerate(self.objects):
 			pos = obj.pos(t)
-			self.axes[i].set_ydata(pos[1])
-			self.axes[i].set_xdata(pos[0])
+			self.axes[i].set_xdata(pos[self.plane[0]])
+			self.axes[i].set_ydata(pos[self.plane[1]])
 		self.fig.canvas.draw_idle()
+
+
 
 
 
@@ -84,22 +90,25 @@ class Object:
 		self.m = map
 
 		# Initial Position, Velocity, and Acceleration of the Object
-		self.position = np.zeros((3,1))
-		self.velocity = np.zeros((3,1))
-		self.acceleration = np.zeros((3,1))
+		self.position = np.zeros(3)
+		self.velocity = np.zeros(3)
+		self.acceleration = np.zeros(3)
 		self.speed = 1
 
 		# Other Attributes
 		self.type = 0 # 0 for moving, 1 for intelligent
 		self.classification = None # classification from RCNN
-		self.gaussian = 30*GaussND(numN=(np.array([[0,0,0]]).T,1*np.identity(3)))
+		self.radius = 0.6
+		self.gaussian = GaussND(numN=(np.array([[0,0,0]]).T,self.radius*np.identity(3)))
+		self.gaussian = self.gaussian / self.gaussian[[0,0,0]]
 
 		# Pathfinding Weights
 		self.Cheur = 1
-		self.Ctime = 2
-		self.Cprox = 2
-		self.Cdist = 0.1
-		self.Cdir = 0.2
+		self.Ctimedist = 1.5
+		self.Cprox = 0.1
+		self.Cdist = 0.2
+		self.Cdir = 0.1
+		self.Ctime = 0.2
 
 
 		# Internal variables
@@ -109,24 +118,13 @@ class Object:
 		self.tRes = 0.05
 
 
-	def setPos(self,pos):
-		for i in range(3):
-			self.position[i,0] = pos[i]
-
-
-	def setVel(self,vel):
-		for i in range(3):
-			self.velocity[i,0] = vel[i]
-
-
-	def selAcc(self,acc):
-		for i in range(3):
-			self.acceleration[i,0] = acc[i]
-
-
 	# The cost associated with being withing a given proximity of the object
-	def proxCost(self,pos):
-		return self.gaussian[np.reshape(pos,(-1,3))]
+	def proxCost(self,pos,t=0):
+		disp = self.distance(pos,self.pos(t))
+		if disp < self.radius:
+			return float('inf')
+		else:
+			return self.gaussian[np.reshape(pos-self.pos(t),(-1,3))]
 
 
 	# The position of the object t seconds in the future
@@ -157,13 +155,9 @@ class Object:
 		return np.linalg.norm(np.array(pos1)-np.array(pos2))
 
 
-	def heuristic(self,pos,t,destination):
-		return self.distance(pos,destination)
-
-
 	def discretize(self,val,step):
 		for i in range(len(val)):
-			val[i,0] = round(val[i,0] / step) * step
+			val[i] = round(val[i] / step) * step
 		return val
 
 
@@ -171,7 +165,7 @@ class Object:
 		for dx in [-step, 0, step]:
 			for dy in [-step, 0, step]:
 				for dz in [-step, 0, step]:
-					yield pos + np.array([[dx],[dy],[dz]])
+					yield pos + np.array([dx,dy,dz])
 
 
 	def pathplan(self,destination=None,dt=0.1,returnlevel=1):
@@ -182,17 +176,23 @@ class Object:
 		frontier = PriorityQueue()
 		maxsteps = 100000
 		visited = {}
-		if np.linalg.norm(self.velocity) != 0:
+		if self.speed == 0 and np.linalg.norm(self.velocity) != 0:
 			self.speed = np.linalg.norm(self.velocity)
 		elif self.speed == 0:
 			self.speed = 1
 		self.tRes = dt
 		step = max(round(self.tRes * self.speed, 2), 0.01)
+		totaldist = self.distance(self.position,destination)
+		totaltime = totaldist / self.speed
+		if totaldist == 0:
+			totaldist = 1
+		if totaltime == 0:
+			totaltime = 1
 
 		# Starting point
 		ties = count()
 		pos = self.discretize(self.position,step)
-		heuristic = self.heuristic(pos,0,destination)
+		heuristic = self.distance(pos,destination)
 		data = {'pos': pos, 't': 0, 'togo': heuristic, 'dist': 0, 'J': 0, 'prox': 0, 'prev': None}
 		J = heuristic
 		initial = (J, next(ties), data)
@@ -209,22 +209,34 @@ class Object:
 				visited[totuple(pos)] = J
 			else:
 				continue
-			if self.distance(pos,destination) < step:
+			if self.distance(pos,destination) < step-1E-12:
 				break
 			# Add Children to Frontier
 			for nextpos in self.nextpos(pos,step):
 				nextt = data['t'] + self.tRes
 				nextdist = data['dist'] + self.distance(nextpos,pos)
 				nextProx = self.m.proxCost(pos=nextpos,t=nextt,ignore=self)
-				heuristic = self.heuristic(nextpos,nextt,destination)
+				heuristic = self.distance(nextpos,destination)
 
 				vel = (nextpos-pos)
 				lastvel = (pos - data['prev']['pos']) if data['prev'] != None else self.velocity / self.speed * np.linalg.norm(vel)
 				mag = np.linalg.norm(vel) * np.linalg.norm(lastvel)
-				dirchange = (1 - vel.T.dot(lastvel)[0][0] / mag) if mag != 0 else 1
+				dirchange = (1 - np.dot(vel,lastvel) / mag) if mag != 0 else 0
 
-				nextJ = self.Cheur * heuristic + self.Cdist * nextdist + self.Cprox * nextProx + self.Ctime * heuristic * nextt + self.Cdir * dirchange
-				nextdata = {'pos': nextpos, 't': nextt,'togo': heuristic, 'dist': nextdist, 'J': nextJ, 'prox': nextProx, 'prev': data}
+				nextJ = self.Cheur * (heuristic / totaldist) + \
+						self.Cdist * (nextdist / totaldist) + \
+						self.Ctimedist * (heuristic / totaldist * nextt / totaltime) + \
+						self.Ctime * (nextt / totaltime) + \
+						self.Cprox * nextProx + \
+						self.Cdir * dirchange
+
+				nextdata = {'pos': nextpos, 
+							't': nextt,
+							'togo': self.Cheur * (heuristic / totaldist), 
+							'dist': nextdist / totaldist, 
+							'J': nextJ, 
+							'prox': self.Cprox * nextProx, 
+							'prev': data}
 				frontier.put((nextJ, next(ties), nextdata))
 		
 		# Convert Linked List to NP Array
@@ -248,7 +260,7 @@ class Object:
 				togo.append(curr["togo"])
 			curr = curr['prev']
 		path.reverse()
-		path = np.array(path)[:,:,0]
+		path = np.array(path)
 		if returnlevel > 0:
 			t.reverse()
 			t = np.array(t)
@@ -278,50 +290,63 @@ def totuple(arr):
 	return tuple(np.reshape(arr,(-1,)))
 
 
-
-
-
+def plotPaths(paths):
+	if type(paths) != tuple:
+		paths = (paths,)
+	fig = plt.figure()
+	ax = fig.add_subplot(111, projection='3d')
+	for i in range(len(paths)):
+		ax.plot(paths[i][:,0],paths[i][:,1],paths[i][:,2],'o-')
+	plt.show()
 
 
 
 if __name__ == '__main__':
 
-	from matplotlib import pyplot as plt
-
 	m = Map()
 
 	o1 = Object(m)
-	o1.position = np.array([[0,1,0]]).T
-	o1.velocity = np.array([[-0.5,1,0]]).T
+	o1.position = np.array([0,1,0])
+	o1.velocity = np.array([-0.5,1,0])
 	m.objects.add(o1)
 
 	o2 = Object(m)
-	o2.position = np.array([[-1,3,0]]).T
-	o2.velocity = np.array([[-1,-0.5,0]]).T
+	o2.position = np.array([-1,3,0])
+	o2.velocity = np.array([-1,-0.5,0])
 	m.objects.add(o2)
 
 	o3 = Object(m)
-	o3.position = np.array([[-1.5,1.5,0]]).T
-	o3.velocity = np.array([[0.5,0.5,0]]).T
+	o3.position = np.array([-1.5,1.5,0])
+	o3.velocity = np.array([0.5,0.5,0])
 	m.objects.add(o3)
 
 	o4 = Object(m)
-	o4.position = np.array([[0.8,-0.6,0]]).T
-	o4.velocity = np.array([[-0.5,0.5,0]]).T
+	o4.position = np.array([0.8,-0.6,0])
+	o4.velocity = np.array([-0.5,0.5,0])
 	m.objects.add(o4)
 
 	o5 = Object(m)
-	o5.position = np.array([[0.5,0.7,0]]).T
-	o5.velocity = np.array([[0.2,-0.4,0]]).T
+	o5.position = np.array([0.5,0.7,0])
+	o5.velocity = np.array([0.2,-0.4,0])
 	m.objects.add(o5)
+
+	o6 = Object(m)
+	o6.position = np.array([-0.2,-0.5,0])
+	o6.velocity = np.array([1,0,0])
+	m.objects.add(o6)
+
+	o7 = Object(m)
+	o7.position = np.array([-0.7,0,0])
+	o7.velocity = np.array([0.8,0.4,0])
+	m.objects.add(o7)
 
 	o = Object(m)
 	o.type = 1
-	o.velocity = np.array([[2,0,0]]).T
-	o.position = np.array([[0,0,0]]).T
+	o.velocity = np.array([2,0,0])
+	o.position = np.array([0,0,0])
 	m.objects.add(o)
 
-	dest = np.array([[1,1.5,0]]).T
+	dest = np.array([1,1.5,0])
 	path, t, dist, J, prox, togo = o.pathplan(destination=dest,dt=0.1,returnlevel=2)
 
 	m.plot(T=t[-1],lim=[-3,3,-1,6])
