@@ -1,12 +1,3 @@
-import sys
-import pcl
-import math
-import argparse
-import sys
-import os
-from PIL import Image
-
-
 class Agent:
 
     #this agent is defined by these points
@@ -40,3 +31,6 @@ class Agent:
         r = math.sqrt(pow(c[0]-min_x, 2), pow(c[1]-min_y, 2), pow(c[2]-min_z, 2))
 
         return c, r
+
+    def predict(self):
+        pass

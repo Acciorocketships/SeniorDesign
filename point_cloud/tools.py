@@ -1,5 +1,7 @@
 import math
 import numpy as np
+import os
+import cv2
 
 '''
 linear algebra matrix tool functions -------------------------------------------------------------------------------------------------
@@ -7,153 +9,173 @@ linear algebra matrix tool functions -------------------------------------------
 
 #http://planning.cs.uiuc.edu/node102.html
 def yaw(vector, angle, do_round=True):
-	result = [math.cos(angle) * vector[0] - math.sin(angle) * vector[1],
-			math.sin(angle) * vector[0] + math.cos(angle) * vector[1],
-			vector[2]]
-	if do_round:
-		return vector_round(result, 14)
-	else:
-		return result
+    result = [math.cos(angle) * vector[0] - math.sin(angle) * vector[1],
+            math.sin(angle) * vector[0] + math.cos(angle) * vector[1],
+            vector[2]]
+    if do_round:
+        return vector_round(result, 14)
+    else:
+        return result
 
 def pitch(vector, angle, do_round=True):
-	result = [math.cos(angle) * vector[0] + math.sin(angle) * vector[2],
-			vector[1],
-			-math.sin(angle) * vector[0] + math.cos(angle) * vector[2]]
-	if do_round:
-		return vector_round(result, 14)
-	else:
-		return result
+    result = [math.cos(angle) * vector[0] + math.sin(angle) * vector[2],
+            vector[1],
+            -math.sin(angle) * vector[0] + math.cos(angle) * vector[2]]
+    if do_round:
+        return vector_round(result, 14)
+    else:
+        return result
 
 def roll(vector, angle, do_round=True):
-	result = [vector[0],
-			math.cos(angle) * vector[1] - math.sin(angle) * vector[2],
-			math.sin(angle) * vector[1] + math.cos(angle) * vector[2]]
-	if do_round:
-		return vector_round(result, 14)
-	else:
-		return result
+    result = [vector[0],
+            math.cos(angle) * vector[1] - math.sin(angle) * vector[2],
+            math.sin(angle) * vector[1] + math.cos(angle) * vector[2]]
+    if do_round:
+        return vector_round(result, 14)
+    else:
+        return result
 
 def identity():
-	return [[1, 0, 0],
-			[0, 1, 0],
-			[0, 0, 1]]
+    return [[1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1]]
 
 def matrix_multiplier(matrix, mult):
-	result = identity()
-	for i in range(3):
-		for j in range(3):
-			result[i][j] = matrix[i][j] * mult
-	return result
+    result = identity()
+    for i in range(3):
+        for j in range(3):
+            result[i][j] = matrix[i][j] * mult
+    return result
 
 def matrix_add(m1, m2):
-	result = identity();
-	for i in range(3):
-		for j in range(3):
-			result[i][j] = m1[i][j] + m2[i][j]
-	return result
+    result = identity();
+    for i in range(3):
+        for j in range(3):
+            result[i][j] = m1[i][j] + m2[i][j]
+    return result
 
-'''
-TODO figure out the kwargs thing
-'''
 def generate_image(func, max_i, max_j):
-	t = np.zeros((max_i, max_j))
-	#for i in range(max_i):
-	#	for j in range(max_j):
-			#t[i][j] = i + j
+    t = np.zeros((max_i, max_j))
+    #for i in range(max_i):
+    #    for j in range(max_j):
+            #t[i][j] = i + j
 
-	return t
+    return t
 
 # https://math.stackexchange.com/questions/142821/matrix-for-rotation-around-a-vector
 def rmatrix_to_vector(v, angle):
-	w = [[0, -v[2], v[1]],
-		 [v[2], 0, -v[0]],
-		 [-v[1], v[0], 0]]
-	mult = math.sin(angle)
-	first = matrix_multiplier(w, mult)
+    w = [[0, -v[2], v[1]],
+         [v[2], 0, -v[0]],
+         [-v[1], v[0], 0]]
+    mult = math.sin(angle)
+    first = matrix_multiplier(w, mult)
 
-	mult = 2 * pow(math.sin(angle/2), 2)
-	col1 = [w[0][0], w[1][0], w[2][0]]
-	col2 = [w[0][1], w[1][1], w[2][1]]
-	col3 = [w[0][2], w[1][2], w[2][2]]
-	w2 = [[dot_product(w[0], col1), dot_product(w[0], col2), dot_product(w[0], col3)],
-		  [dot_product(w[1], col1), dot_product(w[1], col2), dot_product(w[1], col3)],
-		  [dot_product(w[2], col1), dot_product(w[2], col2), dot_product(w[2], col3)]]
-	second = matrix_multiplier(w2, mult)
+    mult = 2 * pow(math.sin(angle/2), 2)
+    col1 = [w[0][0], w[1][0], w[2][0]]
+    col2 = [w[0][1], w[1][1], w[2][1]]
+    col3 = [w[0][2], w[1][2], w[2][2]]
+    w2 = [[dot_product(w[0], col1), dot_product(w[0], col2), dot_product(w[0], col3)],
+          [dot_product(w[1], col1), dot_product(w[1], col2), dot_product(w[1], col3)],
+          [dot_product(w[2], col1), dot_product(w[2], col2), dot_product(w[2], col3)]]
+    second = matrix_multiplier(w2, mult)
 
-	result = matrix_add(identity(), first)
-	return matrix_add(result, second)
+    result = matrix_add(identity(), first)
+    return matrix_add(result, second)
 
 def normalize_matrix(matrix, high, low):
-	i, j = np.shape(matrix)
-	highest = -float("inf")
-	lowest = float("inf")
-	for x in range(i):
-		highest = max(highest, max(matrix[x]))
-		lowest = min(lowest, min(matrix[x]))
+    i, j = np.shape(matrix)
+    highest = -float("inf")
+    lowest = float("inf")
+    for x in range(i):
+        highest = max(highest, max(matrix[x]))
+        lowest = min(lowest, min(matrix[x]))
 
-	current = highest - lowest
-	available = high - low
-	result = np.zeros((i, j))
+    current = highest - lowest
+    available = high - low
+    result = np.zeros((i, j))
 
-	for x in range(i):
-		for y in range(j):
-			result[x][y] = (matrix[x][y] - lowest)/current * available + low
-	return result
+    for x in range(i):
+        for y in range(j):
+            result[x][y] = (matrix[x][y] - lowest)/current * available + low
+    return result
+
+def make_greyscale(arr):
+    return cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+
+def padding_dist(m, d):
+    return m - d
+
+#p r y = pitch roll yaw of camera's view
+def pry_to_view(view, do_round):
+    p, r, y = view
+    vect = pitch([0,0,1], p, do_round=do_round)
+    vect = roll(vect, r, do_round=do_round)
+    vect = yaw(vect, y, do_round=do_round)
+    return vect
+
+#lp, lr, ly = pitch roll raw of left side of camera, needed to determine rotation of frame about direction of view vector
+def pry_to_horiz(left_view, do_round):
+    lp, lr, ly = left_view
+    horiz = pitch([-1,0,0], lp, do_round=do_round)
+    horiz = roll(horiz, lr, do_round=do_round)
+    horiz = yaw(horiz, ly, do_round=do_round)
+    return horiz
+
 
 '''
 linear algebra vector tool functions -------------------------------------------------------------------------------------------------
 '''
 
 def vector_round(vector, decs):
-	result = []
-	for num in vector:
-		result.append(round(num, decs))
-	return result
+    result = []
+    for num in vector:
+        result.append(round(num, decs))
+    return result
 
 def dot_product(v, u):
-	return v[0] * u[0] + v[1] * u[1] + v[2] * u[2]
+    return v[0] * u[0] + v[1] * u[1] + v[2] * u[2]
 
 def make_ints(v):
-	return [int(v[0]), int(v[1]), int(v[2])]
+    return [int(v[0]), int(v[1]), int(v[2])]
 
 def make_unit_vector(v):
-	size = len_vector(v)
-	return normalize(v, size)
+    size = len_vector(v)
+    return normalize(v, size)
 
 def ortho(u, v):
-	return [u[1] * v[2] - v[1] * u[2],
-			-(u[0] * v[2] - v[0] * u[2]),
-			u[0] * v[1] - v[0] * u[1]]
+    return [u[1] * v[2] - v[1] * u[2],
+            -(u[0] * v[2] - v[0] * u[2]),
+            u[0] * v[1] - v[0] * u[1]]
 
 def len_vector(v):
-	return math.sqrt(pow(v[0], 2) + pow(v[1], 2) + pow(v[2], 2))
+    return math.sqrt(pow(v[0], 2) + pow(v[1], 2) + pow(v[2], 2))
 
 def normalize(v, n):
-	return [v[0]/ n, v[1]/n, v[2]/n]
+    return [v[0]/ n, v[1]/n, v[2]/n]
 
 def vector_multiplier(v, dist):
-	return [v[0] * dist, v[1] * dist, v[2] * dist]
+    return [v[0] * dist, v[1] * dist, v[2] * dist]
 
 def invert(v):
-	return [-v[0], -v[1], -v[2]]
+    return [-v[0], -v[1], -v[2]]
 
 def sum_vectors(v, u):
-	return [v[0] + u[0], v[1] + u[1], v[2] + u[2]]
+    return [v[0] + u[0], v[1] + u[1], v[2] + u[2]]
 
 def angle_2_vectors(v, u):
-	try:
-		top = dot_product(v, u)
-		bottom = len_vector(v) * len_vector(u)
-		return math.acos(top/bottom)
-	except:
-		return 0
+    try:
+        top = dot_product(v, u)
+        bottom = len_vector(v) * len_vector(u)
+        return math.acos(top/bottom)
+    except:
+        return 0
 
 #projection of vector u along v direction
 def projection_vector(u, v):
-	top = dot_product(u, v)
-	bottom = pow(len_vector(v), 2)
-	mult = top/bottom
-	return (v[0] * mult, v[1] * mult, v[2] * mult)
+    top = dot_product(u, v)
+    bottom = pow(float(len_vector(v)), 2.0)
+    mult = float(top)/float(bottom)
+    return (float(v[0]) * float(mult), float(v[1]) * float(mult), float(v[2]) * float(mult))
 
 '''
 point cloud tool functions -------------------------------------------------------------------------------------------------
@@ -170,13 +192,37 @@ def find_min_max(points_list):
     max_y = max([tup[1] for tup in points_list])
     min_z = min([tup[2] for tup in points_list])
     max_z = max([tup[2] for tup in points_list])
-    return (min_x, max_z), (min_y, max_y), (min_z, max_z)
+    return (min_x, max_x), (min_y, max_y), (min_z, max_z)
 
 def pts_dist(pt1, pt2):
-	x = pt1[0] - pt2[0]
-	y = pt1[1] - pt2[1]
-	z = pt1[2] - pt2[2]
-	return len_vector((x, y, z))
+    x = pt1[0] - pt2[0]
+    y = pt1[1] - pt2[1]
+    z = pt1[2] - pt2[2]
+    return len_vector((x, y, z))
+
+'''
+detection class -------------------------------------------------------------------------------------------------
+'''
+
+def in_coords(frame, pt):
+    bl = frame[0]
+    tr = frame[1]
+
+    if pt[0] >= bl[0] and pt[0] <= tr[0] and pt[1] >= bl[1] and pt[1] <= tr[1]:
+        return true
+    else:
+        return false
+
+'''
+saved = file containing 4 numbers on each line to identify agent locations
+'''
+def read_agents(self, saved="s.txt"):
+    results = []
+    with open(saved, "r") as f:
+        for line in f:
+            results.append(line.split())
+    return result
+
 
 
 

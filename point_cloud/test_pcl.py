@@ -7,90 +7,196 @@ import sys
 import numpy as np
 import os
 from PIL import Image
+from scipy.misc import imread
 
-cloud = CloudManager(math.pi/4, math.pi/4, 10, do_round=False)
-'''
-def test_make_cloud():
-	#test concat_points_cloud
-	print()
-	print(test_make_cloud.__name__)
-	c.concat_points_cloud([(1, 2, 3), (4, 5, 6), (6, 7, 8)])
-	c.print_cloud()
+cloud = CloudManager(math.pi*5/6, math.pi*5/6, 20, do_round=False)
 
-def test_r_search():
-	print()
-	print(test_r_search.__name__)
-	#test radius search
-	result = c.radius_search((1,1,1), 1, 9)
-	print("result " + str(result))
+def test_in_view():
+    vect = [0, 0, 1]
+    horz = [-1, 0, 0]
+    test = cloud.in_view((0, 0, 0), (0, 0, 9.999), vect, horz, tools.ortho(vect, horz))
+    print(test)
 
-def test_replace_with_pts():
-	print()
-	print(test_replace_with_pts.__name__)
-	#test replace space
-	items = [1,2,3]
-	full = [(x, y, z) for x in items for y in items for z in items]
-	c.concat_points_cloud(full)
+def test_out_of_view():
+    vect = [0, 0, 1]
+    horz = [-1, 0, 0]
+    test = cloud.in_view((0, 0, 0), (0, 0, 10.001), vect, horz, tools.ortho(vect, horz))
+    print(test)
 
 
-def test_replace_with_empty():
-	print(test_replace_with_empty.__name__)
-	#test replace with empty space
-	print("before " + str(c.cloud_size()))
-	empty = [(1,1,1), (3,3,3)]
-	c.concat_points_cloud(empty)
-	print("after " + str(c.cloud_size()))
-'''
 def test_depth_map():
-	t = np.zeros((8, 8))
-	for i in range(8):
-		for j in range(8):
-			t[i][j] = i + j
 
-	t = np.array(t)
-	print(t)
-	t=tools.normalize_matrix(t, 255, 55)
-	cloud.concat_depth_map((1, 2, 3), t, (math.pi, math.pi/2, 0), (math.pi/2, 0, 0))
+    t = np.zeros((8, 8))
+    for i in range(8):
+        for j in range(8):
+            t[i][j] = i + j
 
-	t = np.zeros((8, 8))
-	for i in range(8):
-		for j in range(8):
-			t[i][j] = abs(i - j)
+    t = np.array(t)
+    print(t)
+    t=tools.normalize_matrix(t, 255, 55)
+    cloud.concat_depth_map((1, 7, -5), t, (math.pi, math.pi/2, 0), (math.pi/2, 0, 0))
 
-	t = np.array(t)
-	print(t)
-	t=tools.normalize_matrix(t, 255, 55)
-	cloud.concat_depth_map((1, 1, 1), t, (math.pi, 0, 0), (0, math.pi, 0))
+    t = np.zeros((8, 8))
+    for i in range(8):
+        for j in range(8):
+            t[i][j] = abs(i - j)
 
-	t = np.zeros((8, 8))
-	for i in range(8):
-		for j in range(8):
-			if i > j:
-				t[i][j] = 50
-			else:
-				t[i][j] = 200
+    t = np.array(t)
+    print(t)
+    t=tools.normalize_matrix(t, 255, 55)
+    cloud.concat_depth_map((1, 1, 1), t, (math.pi, 0, 0), (0, math.pi, 0))
 
-	t = np.array(t)
-	print(t)
-	t=tools.normalize_matrix(t, 255, 55)
-	cloud.concat_depth_map((3, 3, 5), t, (math.pi, math.pi, math.pi/2), (0, math.pi, 0))
+    t = np.zeros((8, 8))
+    for i in range(8):
+        for j in range(8):
+            if i > j:
+                t[i][j] = 50
+            else:
+                t[i][j] = 200
+
+    t = np.array(t)
+    print(t)
+    t=tools.normalize_matrix(t, 255, 55)
+    cloud.concat_depth_map((3, 3, 5), t, (math.pi, math.pi, math.pi/2), (0, math.pi, 0))
+    cloud.concat_points_list([(0, 0, 0)])
+    cloud.save_cloud_points("t.txt")
+
+def test_append():
+    t = np.zeros((8, 8))
+    for i in range(8):
+        for j in range(8):
+            t[i][j] = i + j
+
+    t = np.array(t)
+    print(t)
+    t=tools.normalize_matrix(t, 255, 55)
+    cloud.append_depth_map((1, 7, -5), t, (math.pi, math.pi/2, 0), (math.pi/2, 0, 0))
+
+    t = np.zeros((8, 8))
+    for i in range(8):
+        for j in range(8):
+            t[i][j] = abs(i - j)
+
+    t = np.array(t)
+    print(t)
+    t=tools.normalize_matrix(t, 255, 55)
+    cloud.append_depth_map((1, 1, 1), t, (math.pi, 0, 0), (0, math.pi, 0))
+
+    t = np.zeros((8, 8))
+    for i in range(8):
+        for j in range(8):
+            if i > j:
+                t[i][j] = 50
+            else:
+                t[i][j] = 200
+
+    t = np.array(t)
+    print(t)
+    t=tools.normalize_matrix(t, 255, 55)
+    cloud.append_depth_map((3, 3, 5), t, (math.pi, math.pi, math.pi/2), (0, math.pi, 0))
+    cloud.concat_points_list([(0, 0, 0)])
+    cloud.save_cloud_points("t.txt")
+
+def test_cube():
+    t = [(x, y, z) for x in range(-10, 10) for y in range(-10, 10) for z in range(-10, 10)]
+    s = [(x, y, z) for x in range(-2, 2) for y in range(-2, 2) for z in range(0, 50)]
+    cloud.cloud = pcl.PointCloud(t+s)
+    arr = np.random.rand(100,100) * 255
+    cloud.concat_depth_map((0, 0, 0), arr, (math.pi, 0, 0), (0, math.pi, 0))
+    arr = np.random.rand(100,100) * 255
+    cloud.concat_depth_map((-3, 2, 3), arr, (math.pi/4, 0, 0), (0, math.pi/2, 0))
+    cloud.save_cloud_points("t.txt")
 
 
-	cloud.concat_points_list([(0, 0, 0)])
-	cloud.save_cloud("test.txt")
+def test_depth_map2():
+    im = imread("res/lines.png")
+    if len(im.shape) > 2:
+        im = tools.make_greyscale(im)
+    #t = tools.normalize_matrix(im, 255, 55)
+    arr = cloud.process_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    cloud.save_points("t.txt", arr)
+    #cloud.concat_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    #cloud.save_cloud("t.txt")
+
+def test_depth_map3():
+    m = np.zeros((100, 100))
+    cloud.concat_points_list([(0, 0, 0)])
+    m = m + 50
+    arr = cloud.process_depth_map((0, 0, 0), m, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    m = m + 10
+    arr += cloud.process_depth_map((0, 0, 0), m, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    m = m + 150
+    arr += cloud.process_depth_map((0, 0, 0), m, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    m = m + 10
+    arr += cloud.process_depth_map((0, 0, 0), m, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    
+    cloud.save_points("t.txt", arr)
+
+def test_depth_map_merge():
+    im = imread("res/rabbit.png")
+    if len(im.shape) > 2:
+        im = tools.make_greyscale(im)
+    arr = cloud.process_depth_map((0, 0, 0), im, (math.pi, 0, 0), (math.pi, 0, 0))
+    im = imread("res/lines.png")
+    if len(im.shape) > 2:
+        im = tools.make_greyscale(im)
+    arr2 = cloud.process_depth_map((2, -4, 1), im, (math.pi, 0, 0), (0, math.pi, 0))
+
+    cloud.save_points("t.txt", arr+arr2)
+
+
+
+def test_crop_box():
+    im = imread("res/rabbit.png")
+    if len(im.shape) > 2:
+        im = tools.make_greyscale(im)
+    arr = cloud.process_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    cloud.cloud = pcl.PointCloud(arr)
+    cbf = cloud.cloud.make_cropbox()
+    cbf.set_Min(-1, -1, -1, 1.0)
+    cbf.set_Max(1, 1, 1, 1.0)
+    cloud_out = cbf.filter()
+    cloud.cloud = cloud_out
+    cloud.save_points("t.txt", cloud.cloud.to_list())
+
+def test_conditional():
+    im = imread("res/rabbit.png")
+    if len(im.shape) > 2:
+        im = tools.make_greyscale(im)
+    arr = cloud.process_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    cloud.cloud = pcl.PointCloud(arr)
+
+
+def test_extract():
+    im = imread("res/rabbit.png")
+    if len(im.shape) > 2:
+        im = tools.make_greyscale(im)
+    arr = cloud.process_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    cloud.cloud = pcl.PointCloud(arr)
+    
+
+def test_read_agents():
+    cloud.read_agents()
 
 def test_write_cloud():
-	c.save_cloud("test.txt")
+    cloud.save_cloud("test.txt")
 
+def test_write_cloud2():
+    a = np.random.randn(100, 3).astype(np.float32)
+    p1 = pcl.PointCloud(a)
+    pcl.save(p1, "temppcl.pcd")
 
-#test_make_cloud()
-#test_replace_with_pts()
-#test_r_search()
-
-#test_replace_with_empty()
-test_depth_map()
-#test_write_cloud()
-#p = pcl.PointCloud()
+#test_depth_map()
+#test_append()
+#test_cube()
+#test_depth_map_merge()
+#test_in_view()
+#test_out_of_view()
+test_depth_map2()
+#test_depth_map3()
+#test_read_agents()
+#test_write_cloud2()
+#test_crop_box()
 
 
 

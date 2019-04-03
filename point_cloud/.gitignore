@@ -1,0 +1,9 @@
+*.jpg
+*.png
+*.DS_Store
+*.txt
+Python-*
+hello.py
+*.h5
+res
+*.whl
