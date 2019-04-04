@@ -40,7 +40,7 @@ class Planner:
 
 
 	# Plan a path using differential flatness
-	def spline(self, t=None):
+	def spline(self, dt=0.01):
 
 		self.astar()
 
@@ -48,8 +48,8 @@ class Planner:
 
 		p, v, a = calcHermite(path_pruned, v0=self.vel, vT=self.targetvel, a0=self.acc, aT=self.targetacc)
 
-		if t is not None:
-			self.t = t
+		if dt is not None:
+			self.t = np.arange(t_pruned[0],t_pruned[-1],dt)
 		else:
 			self.t = self.rought
 		self.p = hermite(p, v, a, t_pruned, self.t, nderiv=0)
@@ -169,6 +169,7 @@ class Planner:
 		o = Object(self.map)
 		o.position = self.pos
 		o.speed = 1
+		self.map.objects.add(o)
 		self.roughpath, self.rought = o.pathplan(destination=self.targetpos,dt=0.1,returnlevel=1)
 
 
@@ -201,7 +202,7 @@ def isCollinear(p1,p2,p3):
 		return True
 	v1 /= mag1
 	v2 /= mag2
-	return np.dot(v1.reshape((-1,)),v2.reshape((-1,))) == 1
+	return abs(np.dot(v1.reshape((-1,)),v2.reshape((-1,))) - 1) < 1E-12
 
 # Calculates the value of the spline at any time teval, 
 # given the hermite coefficients (position, velocity, acceleration, corresponding time)
@@ -278,9 +279,9 @@ def Ab(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), a0=np.zeros((1,3)), aT=np.zero
 	N = p.shape[0]
 	A = np.zeros((4*N,4*N))
 	b = np.zeros((4*N,3))
-	p = np.concatenate((p,np.array([2*p[-1,:]-p[-2,:]])),axis=0)
 
-	for i in range(N-1):
+	# Main Equations
+	for i in range(N-2):
 
 		A[4*i,4*i+1] = 1
 		A[4*i,4*(i+1)] = -1
@@ -308,17 +309,43 @@ def Ab(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), a0=np.zeros((1,3)), aT=np.zero
 		A[4*i+3,4*(i+1)+3] = -24
 		b[4*i+3,:] = 360*(p[i,:]-p[i+2,:])
 
-	A[4*(N-1),0] = 1
-	b[4*(N-1),:] = v0.reshape((1,3))
+	# Set Start and End Velocity and Acceleration
+	A[4*(N-2),0] = 1
+	b[4*(N-2),:] = v0.reshape((1,3))
 
-	A[4*(N-1)+1,4*(N-1)] = 1
-	b[4*(N-1)+1,:] = vT.reshape((1,3))
+	A[4*(N-2)+1,4*(N-1)] = 1
+	b[4*(N-2)+1,:] = vT.reshape((1,3))
 
-	A[4*(N-1)+2,2] = 1
-	b[4*(N-1)+2,:] = a0.reshape((1,3))
+	A[4*(N-2)+2,2] = 1
+	b[4*(N-2)+2,:] = a0.reshape((1,3))
 
-	A[4*(N-1)+3,4*(N-1)+3] = 1
-	b[4*(N-1)+3,:] = aT.reshape((1,3))
+	A[4*(N-2)+3,4*(N-1)+3] = 1
+	b[4*(N-2)+3,:] = aT.reshape((1,3))
+
+	# Add Extra Constraint so A is nxn
+	A[4*(N-1),0] = -36
+	A[4*(N-1),1] = -24
+	A[4*(N-1),2] = -9
+	A[4*(N-1),3] = 3
+	b[4*(N-1),:] = 60*(p[0,:]-p[1,:])
+
+	A[4*(N-1)+1,4*(N-1)] = -24
+	A[4*(N-1)+1,4*(N-1)+1] = -36
+	A[4*(N-1)+1,4*(N-1)+2] = -3
+	A[4*(N-1)+1,4*(N-1)+3] = 9
+	b[4*(N-1)+1,:] = 60*(p[N-2,:]-p[N-1,:])
+
+	A[4*(N-1)+2,0] = -192
+	A[4*(N-1)+2,1] = -168
+	A[4*(N-1)+2,2] = 36
+	A[4*(N-1)+2,3] = -24
+	b[4*(N-1)+2,:] = 360*(p[1,:]-p[0,:])
+
+	A[4*(N-1)+3,4*(N-1)] = -168
+	A[4*(N-1)+3,4*(N-1)+1] = -192
+	A[4*(N-1)+3,4*(N-1)+2] = -24
+	A[4*(N-1)+3,4*(N-1)+3] = 36
+	b[4*(N-1)+3,:] = 360*(p[N-2,:]-p[N-1,:])
 
 	return (A,b)
 
@@ -387,10 +414,10 @@ def create_map():
 
 def test_astar():
 	planner = Planner(map=create_map())
-	planner.targetpos = np.array([2,0,0])
-	planner.vel = np.array([0,1,0])
+	planner.pos = np.array([2,2,0])
+	planner.targetpos = np.array([0,0,0])
+	planner.vel = np.array([1,0,0])
 	planner.astar()
-	import pdb; pdb.set_trace()
 	plotPaths(planner.roughpath)
 
 
@@ -421,15 +448,17 @@ def test_prunePath():
 
 def test_spline(map=create_map()):
 	planner = Planner()
-	planner.targetpos = np.array([1,1.5,0])
+	planner.pos = np.array([2,2,0])
+	planner.targetpos = np.array([3,3,0])
 	planner.vel = np.array([1,0,0])
+	import pdb; pdb.set_trace()
 	planner.spline()
 	plotPaths((planner.p, planner.roughpath))
 
 
 if __name__ == '__main__':
 	
-	test_astar()
+	test_spline()
 
 
 
