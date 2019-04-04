@@ -37,13 +37,6 @@ class Planner:
 
 
 
-	def pathplan(self):
-		
-		pass
-
-
-
-
 	def astar(self):
 
 		o = Object(self.map)
@@ -53,16 +46,10 @@ class Planner:
 
 
 
-	def spline(self):
-
-		pass
-
-
 
 	def mpc(self):
 
 		s = solver()
-
 
 		## Quadcopter Parameters ##
 
@@ -74,7 +61,6 @@ class Planner:
 		Iz = s.Param(value=0.0185, name="Moment of Inertia about Z Axis")
 		Jr = s.Param(value=2.74E-4, name="Inertia of Rotor") # pg.32 http://www.diva-portal.org/smash/get/diva2:1020192/FULLTEXT02.pdf
 		g = s.Param(value=9.81, name="Gravity")
-
 
 
 		## Variables ##
@@ -111,7 +97,6 @@ class Planner:
 		vz = s.SV(value=self.vel[2], name="Vz")
 
 
-
 		## Set Target Path ##
 
 		if self.t.size == 0:
@@ -137,7 +122,6 @@ class Planner:
 		s.Equation(z.dt() == vz)
 
 
-
 		## Equations of Motion ##
 
 		# Orientation Derivative
@@ -156,7 +140,6 @@ class Planner:
 		s.Equation(vz.dt() == g - s.cos(phi)*s.cos(theta)/m * U1)
 
 
-
 		## Solve ##
 
 		s.options.CV_TYPE = 1 # squared error
@@ -170,11 +153,86 @@ class Planner:
 
 
 
-def calcHermite(p, v0=np.zeros((3,1)), vT=np.zeros((3,1)), a0=np.zeros((3,1)), aT=np.zeros((3,1))):
+
+
+
+
+
+
+def Hermite(p,v,a,t,teval,nderiv=0):
+	p = np.array(p)
+	v = np.array(v)
+	a = np.array(a)
+	t = np.array(t)
+	teval = np.array(teval)
+	# Calculate the time indices
+	dt = t[1] - t[0]
+	tidx = np.floor((teval-t[0]) / dt).astype(np.int)
+	# Calculate the time indices for non-constant time steps
+	if not np.all(t[tidx] == t[0] + tidx * dt):
+		tidx = []
+		for i in range(teval.size):
+			if teval[i] <= t[0]:
+				tidx.append(0)
+			elif teval >= t[-1]:
+				tidx.append(t.size-1)
+			else:
+				tidx.append(np.argmax(t>teval[i]))
+		tidx = np.array(tidx)
+	M = np.array([[1,   0,   0, -10,  15,  -6],
+		 		  [0,   0,   0,  10, -15,   6],
+		 		  [0,   1,   0,  -6,   8,  -3],
+		 		  [0,   0,   0,  -4,   7,  -3],
+				  [0,   0, 0.5,-1.5, 1.5,-0.5],
+		 		  [0,   0,   0, 0.5,  -1, 0.5]])
+	result = []
+	if len(tidx.shape)==0:
+		tidx = np.array([tidx])
+	for i in range(tidx.size):
+		G = np.stack((p[tidx[i],:], p[tidx[i]+1,:], v[tidx[i],:], v[tidx[i]+1,:], a[tidx[i],:], a[tidx[i]+1,:]), axis=1)
+		u = (teval[i]-t[tidx[i]]) / (t[tidx[i]+1]-t[tidx[i]])
+		U = np.array([nPr(0,nderiv) * (u ** max(0,0-nderiv)),
+					  nPr(1,nderiv) * (u ** max(0,1-nderiv)),
+					  nPr(2,nderiv) * (u ** max(0,2-nderiv)),
+					  nPr(3,nderiv) * (u ** max(0,3-nderiv)),
+					  nPr(4,nderiv) * (u ** max(0,4-nderiv)),
+					  nPr(5,nderiv) * (u ** max(0,5-nderiv))])
+		result.append(G @ M @ U)
+	result = np.array(result)
+	return result
+
+
+def calcHermite(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), a0=np.zeros((1,3)), aT=np.zeros((1,3))):
+
+	p = np.array(p)
+	v0 = np.array(v0)
+	vT = np.array(vT)
+	a0 = np.array(a0)
+	aT = np.array(aT)
+
+	A, b = Ab(p,v0,vT,a0,aT)
+
+	c = np.linalg.solve(A,b)
+
+	N = p.shape[0]
+	v = np.zeros((N,3))
+	a = np.zeros((N,3))
+	for i in range(N):
+		v[i,:] = c[4*i,:]
+		a[i,:] = c[4*i+2,:]
+	v[N-1,:] = c[4*(N-1)+1,:]
+	a[N-1,:] = c[4*(N-1)+3,:]
+
+	return (p,v,a)
+
+
+# Calculates the A and b matrices for a Hermite Spline given a list of knots
+def Ab(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), a0=np.zeros((1,3)), aT=np.zeros((1,3))):
 
 	N = p.shape[0]
 	A = np.zeros((4*N,4*N))
 	b = np.zeros((4*N,3))
+	p = np.concatenate((p,np.array([2*p[-1,:]-p[-2,:]])),axis=0)
 
 	for i in range(N-1):
 
@@ -184,16 +242,25 @@ def calcHermite(p, v0=np.zeros((3,1)), vT=np.zeros((3,1)), a0=np.zeros((3,1)), a
 		A[4*i+1,4*i+3] = 1
 		A[4*i+1,4*(i+1)+2] = -1
 
-		A[4*i+2,4*i] = 12
-		A[4*i+2,4*i+1] = -12
-		A[4*i+2,4*i+2] = 6
-		A[4*i+2,4*i+3] = 6
+		A[4*i+2,4*i] = 24
+		A[4*i+2,4*i+1] = 36
+		A[4*i+2,4*i+2] = 3
+		A[4*i+2,4*i+3] = -9
+		A[4*i+2,4*(i+1)] = -36
+		A[4*i+2,4*(i+1)+1] = -24
+		A[4*i+2,4*(i+1)+2] = -9
+		A[4*i+2,4*(i+1)+3] = 3
+		b[4*i+2,:] = 60*(-p[i,:]+2*p[i+1,:]-p[i+2,:])
 
-		A[4*i+3,4*i] = -24
-		A[4*i+3,4*i+1] = 24
-		A[4*i+3,4*i+2] = 60
-		A[4*i+3,4*i+3] = -60
-		b[4*i+3,:] = 720*(p[i+1,:] - p[i,:])
+		A[4*i+3,4*i] = 168
+		A[4*i+3,4*i+1] = 192
+		A[4*i+3,4*i+2] = 24
+		A[4*i+3,4*i+3] = -36
+		A[4*i+3,4*(i+1)] = -192
+		A[4*i+3,4*(i+1)+1] = -168
+		A[4*i+3,4*(i+1)+2] = 36
+		A[4*i+3,4*(i+1)+3] = -24
+		b[4*i+3,:] = 360*(p[i,:]-p[i+2,:])
 
 	A[4*(N-1),0] = 1
 	b[4*(N-1),:] = v0.reshape((1,3))
@@ -207,17 +274,21 @@ def calcHermite(p, v0=np.zeros((3,1)), vT=np.zeros((3,1)), a0=np.zeros((3,1)), a
 	A[4*(N-1)+3,4*(N-1)+3] = 1
 	b[4*(N-1)+3,:] = aT.reshape((1,3))
 
-	c = np.linalg.solve(A,b)
+	return (A,b)
 
-	v = np.zeros((N,3))
-	a = np.zeros((N,3))
-	for i in range(N):
-		v[i,:] = c[4*i,:]
-		a[i,:] = c[4*i+2,:]
-	v[N-1,:] = c[4*(N-1)+1,:]
-	a[N-1,:] = c[4*(N-1)+3,:]
+def nPr(n,r):
+	if r > n:
+		return 0
+	ans = 1
+	for k in range(n,max(1,n-r),-1):
+		ans = ans * k
+	return ans
 
-	return (p,v,a)
+
+
+
+
+
 
 
 def test_astar():
@@ -230,8 +301,10 @@ def test_astar():
 
 def test_calcHermite():
 	path = np.array([[0,0,0],[1,0,0],[1.5,1,0],[1,1.5,0]])
+	t = np.array([1,2,3,4])
 	p, v, a = calcHermite(path)
-	plotPaths(path)
+	spline = Hermite(p,v,a,t,np.linspace(1,3.9,100),nderiv=0)
+	plotPaths(spline)
 
 
 def test_mpc():
