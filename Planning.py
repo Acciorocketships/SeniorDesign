@@ -15,38 +15,49 @@ class Planner:
 
 		# Target
 		self.targetpos = np.array([0,0,0])
-		self.targetvel = None
-		self.targetrot = None
+		self.targetvel = np.array([0,0,0])
+		self.targetacc = np.array([0,0,0])
 
 		# Current State
 		self.pos = np.array([0,0,0])
 		self.vel = np.array([0,0,0])
-		self.rot = np.array([0,0,0])
+		self.acc = np.array([0,0,0])
 
-		# More Current State Values
+		# More Current State Values (for MPC)
+		self.rot = np.array([0,0,0])
 		self.angvel = np.array([0,0,0])
 		self.propangvel = np.array([0,0,0,0])
 
 		# Planned Path
-		self.roughpath = np.array([])
-		self.path = np.array([])
-		self.control = np.array([])
-		self.motorcontrol = np.array([])
-		self.t = np.array([])
+		self.p = np.zeros((1,3))
+		self.v = np.zeros((1,3))
+		self.t = np.zeros((1,))
+		# Path Planning Intermediates
+		self.roughpath = np.zeros((1,3))
+		self.rought = np.zeros((1,))
 
 
 
 
-	def astar(self):
+	# Plan a path using differential flatness
+	def spline(self, t=None):
 
-		o = Object(self.map)
-		o.position = self.pos
-		o.speed = 1
-		self.roughpath, self.t = o.pathplan(destination=self.targetpos,dt=0.1,returnlevel=1)
+		self.astar()
+
+		path_pruned, t_pruned = prunePath(self.roughpath, self.rought)
+
+		p, v, a = calcHermite(path_pruned, v0=self.vel, vT=self.targetvel, a0=self.acc, aT=self.targetacc)
+
+		if t is not None:
+			self.t = t
+		else:
+			self.t = self.rought
+		self.p = hermite(p, v, a, t_pruned, self.t, nderiv=0)
+		self.v = hermite(p, v, a, t_pruned, self.t, nderiv=1)
 
 
 
-
+	# Plan a path using model predictive control (nonlinear optimization)
 	def mpc(self):
 
 		s = solver()
@@ -148,7 +159,17 @@ class Planner:
 		s.options.MAX_ITER = 10000
 		s.solve(disp=True)
 
-		self.path = np.array([x,y,z]).T
+		self.p = np.array([x,y,z]).T
+
+
+
+
+	def astar(self):
+
+		o = Object(self.map)
+		o.position = self.pos
+		o.speed = 1
+		self.roughpath, self.rought = o.pathplan(destination=self.targetpos,dt=0.1,returnlevel=1)
 
 
 
@@ -156,10 +177,35 @@ class Planner:
 
 
 
+# Removes all collinear points in a path
+def prunePath(path,t):
+	pathout = [path[0,:]]
+	tout = [t[0]]
+	for i in range(1,path.shape[0]-1):
+		if not isCollinear(pathout[-1],path[i,:],path[i+1,:]):
+			pathout.append(path[i,:])
+			tout.append(t[i])
+	pathout.append(path[-1,:])
+	tout.append(t[-1])
+	pathout = np.array(pathout)
+	tout = np.array(tout)
+	return (pathout,tout)
 
+# Helper function for prunePath
+def isCollinear(p1,p2,p3):
+	v1 = p2 - p1
+	v2 = p3 - p2
+	mag1 = np.linalg.norm(v1)
+	mag2 = np.linalg.norm(v2)
+	if mag1 == 0 or mag2 == 0:
+		return True
+	v1 /= mag1
+	v2 /= mag2
+	return np.dot(v1.reshape((-1,)),v2.reshape((-1,))) == 1
 
-
-def Hermite(p,v,a,t,teval,nderiv=0):
+# Calculates the value of the spline at any time teval, 
+# given the hermite coefficients (position, velocity, acceleration, corresponding time)
+def hermite(p,v,a,t,teval,nderiv=0):
 	p = np.array(p)
 	v = np.array(v)
 	a = np.array(a)
@@ -169,12 +215,12 @@ def Hermite(p,v,a,t,teval,nderiv=0):
 	dt = t[1] - t[0]
 	tidx = np.floor((teval-t[0]) / dt).astype(np.int)
 	# Calculate the time indices for non-constant time steps
-	if not np.all(t[tidx] == t[0] + tidx * dt):
+	if not np.linalg.norm(t[tidx] - (t[0] + tidx * dt)) < 1E-12:
 		tidx = []
 		for i in range(teval.size):
 			if teval[i] <= t[0]:
 				tidx.append(0)
-			elif teval >= t[-1]:
+			elif teval[i] >= t[-1]:
 				tidx.append(t.size-1)
 			else:
 				tidx.append(np.argmax(t>teval[i]))
@@ -188,7 +234,7 @@ def Hermite(p,v,a,t,teval,nderiv=0):
 	result = []
 	if len(tidx.shape)==0:
 		tidx = np.array([tidx])
-	for i in range(tidx.size):
+	for i in range(tidx.size-1):
 		G = np.stack((p[tidx[i],:], p[tidx[i]+1,:], v[tidx[i],:], v[tidx[i]+1,:], a[tidx[i],:], a[tidx[i]+1,:]), axis=1)
 		u = (teval[i]-t[tidx[i]]) / (t[tidx[i]+1]-t[tidx[i]])
 		U = np.array([nPr(0,nderiv) * (u ** max(0,0-nderiv)),
@@ -197,11 +243,11 @@ def Hermite(p,v,a,t,teval,nderiv=0):
 					  nPr(3,nderiv) * (u ** max(0,3-nderiv)),
 					  nPr(4,nderiv) * (u ** max(0,4-nderiv)),
 					  nPr(5,nderiv) * (u ** max(0,5-nderiv))])
-		result.append(G @ M @ U)
+		result.append(G @ (M @ U))
 	result = np.array(result)
 	return result
 
-
+# Calculates the hermite coefficients (velocity and acceleration) given a list of positions
 def calcHermite(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), a0=np.zeros((1,3)), aT=np.zeros((1,3))):
 
 	p = np.array(p)
@@ -289,21 +335,70 @@ def nPr(n,r):
 
 
 
+def create_map():
+	m = Map()
+
+	o1 = Object(m)
+	o1.position = np.array([0,1,0])
+	o1.velocity = np.array([-0.5,1,0])
+	m.objects.add(o1)
+
+	o2 = Object(m)
+	o2.position = np.array([-1,3,0])
+	o2.velocity = np.array([-1,-0.5,0])
+	m.objects.add(o2)
+
+	o3 = Object(m)
+	o3.position = np.array([-1.5,1.5,0])
+	o3.velocity = np.array([0.5,0.5,0])
+	m.objects.add(o3)
+
+	o4 = Object(m)
+	o4.position = np.array([0.8,-0.6,0])
+	o4.velocity = np.array([-0.5,0.5,0])
+	m.objects.add(o4)
+
+	o5 = Object(m)
+	o5.position = np.array([0.5,0.7,0])
+	o5.velocity = np.array([0.2,-0.4,0])
+	m.objects.add(o5)
+
+	o6 = Object(m)
+	o6.position = np.array([-0.2,-0.5,0])
+	o6.velocity = np.array([1,0,0])
+	m.objects.add(o6)
+
+	o7 = Object(m)
+	o7.position = np.array([-0.7,0,0])
+	o7.velocity = np.array([0.8,0.4,0])
+	m.objects.add(o7)
+
+	o = Object(m)
+	o.type = 1
+	o.velocity = np.array([2,0,0])
+	o.position = np.array([0,0,0])
+	m.objects.add(o)
+
+	dest = np.array([1,1.5,0])
+	o.pathplan(destination=dest,dt=0.1)
+
+	return m
 
 
 def test_astar():
-	planner = Planner()
+	planner = Planner(map=create_map())
 	planner.targetpos = np.array([2,0,0])
 	planner.vel = np.array([0,1,0])
 	planner.astar()
+	import pdb; pdb.set_trace()
 	plotPaths(planner.roughpath)
 
 
 def test_calcHermite():
-	path = np.array([[0,0,0],[1,0,0],[1.5,1,0],[1,1.5,0]])
-	t = np.array([1,2,3,4])
+	path = np.array([[0,0,0],[1,0,0],[2,0,0],[1.5,1,0],[1,1.5,0]])
+	t = np.array([1,2,3,4,5])
 	p, v, a = calcHermite(path)
-	spline = Hermite(p,v,a,t,np.linspace(1,3.9,100),nderiv=0)
+	spline = hermite(p,v,a,t,np.linspace(1,3.9,100),nderiv=0)
 	plotPaths(spline)
 
 
@@ -316,9 +411,25 @@ def test_mpc():
 	plotPaths((planner.roughpath,planner.path))
 
 
+def test_prunePath():
+	path = np.array([[0,0,0],[1,0,0],[2,0,0],[1.5,1,0],[1,1.5,0]])
+	t = np.array([1,2,3,4,5])
+	newpath, newt = prunePath(path,t)
+	print(newpath)
+	print(newt)
+
+
+def test_spline(map=create_map()):
+	planner = Planner()
+	planner.targetpos = np.array([1,1.5,0])
+	planner.vel = np.array([1,0,0])
+	planner.spline()
+	plotPaths((planner.p, planner.roughpath))
+
+
 if __name__ == '__main__':
 	
-	test_calcHermite()
+	test_astar()
 
 
 

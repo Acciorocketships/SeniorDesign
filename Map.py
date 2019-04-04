@@ -260,7 +260,6 @@ class Object:
 				togo.append(curr["togo"])
 			curr = curr['prev']
 		path.reverse()
-		path = np.array(path)
 		if returnlevel > 0:
 			t.reverse()
 			t = np.array(t)
@@ -276,7 +275,10 @@ class Object:
 			togo.reverse()
 			togo = np.array(togo)
 		
+		path = np.array(path)
+		t = np.array(t)
 		self.path = path
+		self.t = t
 
 		if returnlevel > 1:
 			return (path,t,dist,J,prox,togo)
