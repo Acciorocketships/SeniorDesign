@@ -7,3 +7,4 @@ hello.py
 *.h5
 res
 *.whl
+*.pcd

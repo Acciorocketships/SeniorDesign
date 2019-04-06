@@ -1,3 +1,5 @@
+import math
+
 class Agent:
 
     #this agent is defined by these points
@@ -19,12 +21,21 @@ class Agent:
         return self.pts_list
 
     def sphere(self):
-        min_x = min([tup[0] for tup in self.pts_list])
-        max_x = max([tup[0] for tup in self.pts_list])
-        min_y = min([tup[1] for tup in self.pts_list])
-        max_y = max([tup[1] for tup in self.pts_list])
-        min_z = min([tup[2] for tup in self.pts_list])
-        max_z = max([tup[2] for tup in self.pts_list])
+        if (len(self.pts_list)) > 0:
+            min_x = min([tup[0] for tup in self.pts_list])
+            max_x = max([tup[0] for tup in self.pts_list])
+            min_y = min([tup[1] for tup in self.pts_list])
+            max_y = max([tup[1] for tup in self.pts_list])
+            min_z = min([tup[2] for tup in self.pts_list])
+            max_z = max([tup[2] for tup in self.pts_list])
+        else:
+            min_x = 0
+            max_x = 0
+            min_y = 0
+            max_y = 0
+            min_z = 0
+            max_z = 0
+
         
         c = ((min_x + max_x)/2, (min_y + max_y)/2, (min_z + max_z)/2)
 

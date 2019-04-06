@@ -9,7 +9,7 @@ import os
 from PIL import Image
 from scipy.misc import imread
 
-cloud = CloudManager(math.pi*5/6, math.pi*5/6, 20, do_round=False)
+cloud = CloudManager(math.pi/3, math.pi/4, 20, do_round=False)
 
 def test_in_view():
     vect = [0, 0, 1]
@@ -107,14 +107,25 @@ def test_cube():
     cloud.concat_depth_map((-3, 2, 3), arr, (math.pi/4, 0, 0), (0, math.pi/2, 0))
     cloud.save_cloud_points("t.txt")
 
+def test_radius_search():
+    t = [(x, y, z) for x in range(-10, 10) for y in range(-10, 10) for z in range(-10, 10)]
+    s = [(x, y, z) for x in range(-2, 2) for y in range(-2, 2) for z in range(0, 50)]
+    cloud.cloud = pcl.PointCloud(t+s)
+    coords = cloud.radius_search((0,0,0), 5, 5000)
+    cloud.save_points("t.txt", coords)
+
 
 def test_depth_map2():
-    im = imread("res/lines.png")
+    m = []
+    for x in range(-20, 20):
+        for y in range(-20, 20):
+            m.append((x, y, 0))
+    cloud.cloud = pcl.PointCloud(m)
+    im = imread("res/rabbit.png")
     if len(im.shape) > 2:
         im = tools.make_greyscale(im)
-    #t = tools.normalize_matrix(im, 255, 55)
-    arr = cloud.process_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
-    cloud.save_points("t.txt", arr)
+    arr = cloud.process_depth_map((0, 0, -10), im, (0, 0, 0), (0, 0, 0))
+    cloud.save_points("t.txt", arr + m)
     #cloud.concat_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
     #cloud.save_cloud("t.txt")
 
@@ -186,6 +197,28 @@ def test_write_cloud2():
     p1 = pcl.PointCloud(a)
     pcl.save(p1, "temppcl.pcd")
 
+def test_read_pcd():
+    with open("temppcl.pcd") as f:
+        for line in f:
+            print(line)
+
+def test_distance():
+    m = np.zeros((50, 50))
+    m += 200
+    arr = cloud.process_depth_map((0, 0, 0), m, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    cloud.save_points("t.txt", arr)
+
+def test_manual():
+    m = np.zeros((50, 50))
+    for x in range(50):
+        for y in range(50):
+            m[x][y] = abs(0.5*x + 0.5*y)
+    arr = cloud.process_depth_map((0, 0, 0), m, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    cloud.save_points("t.txt", arr)
+
+def find_function():
+    cloud.get_min_max_3D()
+
 #test_depth_map()
 #test_append()
 #test_cube()
@@ -197,8 +230,11 @@ test_depth_map2()
 #test_read_agents()
 #test_write_cloud2()
 #test_crop_box()
-
-
+#test_radius_search()
+#test_read_pcd()
+#test_distance()
+#test_manual()
+#find_function()
 
 
 
