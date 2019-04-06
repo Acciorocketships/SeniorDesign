@@ -41,8 +41,3 @@ class Mainloop:
 		## updates the self.path member variable, a list of positions from the current position to the goal ##
 
 
-
-# If I have time, I will add a controller, but for now, I'm just going to generate a path
-# Eddie will take the next position in the path and fly toward that as a waypoint
-
-
