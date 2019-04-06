@@ -40,13 +40,13 @@ class Planner:
 
 
 	# Plan a path using differential flatness
-	def spline(self, dt=0.01):
+	def spline(self, dt=None):
 
 		self.astar()
 
 		path_pruned, t_pruned = prunePath(self.roughpath, self.rought)
 
-		p, v, a = calcHermite(path_pruned, v0=self.vel, vT=self.targetvel, a0=self.acc, aT=self.targetacc)
+		p, v, a = calcHermiteQP(path_pruned, v0=self.vel, vT=self.targetvel)
 
 		if dt is not None:
 			self.t = np.arange(t_pruned[0],t_pruned[-1],dt)
@@ -171,7 +171,9 @@ class Planner:
 		o.speed = 1
 		self.map.objects.add(o)
 		self.roughpath, self.rought = o.pathplan(destination=self.targetpos,dt=0.1,returnlevel=1)
-
+		
+		# self.roughpath = np.array([[0,0,0],[1,0,0],[1,1,0],[2,2,0]])
+		# self.rought = np.array([0,1,2,3])
 
 
 
@@ -200,9 +202,9 @@ def isCollinear(p1,p2,p3):
 	mag2 = np.linalg.norm(v2)
 	if mag1 == 0 or mag2 == 0:
 		return True
-	v1 /= mag1
-	v2 /= mag2
-	return abs(np.dot(v1.reshape((-1,)),v2.reshape((-1,))) - 1) < 1E-12
+	v1 = v1 / mag1
+	v2 = v2 / mag2
+	return abs(abs(np.dot(v1.reshape((-1,)),v2.reshape((-1,)))) - 1) < 1E-12
 
 # Calculates the value of the spline at any time teval, 
 # given the hermite coefficients (position, velocity, acceleration, corresponding time)
@@ -216,15 +218,15 @@ def hermite(p,v,a,t,teval,nderiv=0):
 	dt = t[1] - t[0]
 	tidx = np.floor((teval-t[0]) / dt).astype(np.int)
 	# Calculate the time indices for non-constant time steps
-	if not np.linalg.norm(t[tidx] - (t[0] + tidx * dt)) < 1E-12:
+	if (tidx > t.size-1).any() or (tidx < 0).any() or not np.linalg.norm(t[tidx] - (t[0] + tidx * dt)) < 1E-12:
 		tidx = []
 		for i in range(teval.size):
 			if teval[i] <= t[0]:
 				tidx.append(0)
 			elif teval[i] >= t[-1]:
-				tidx.append(t.size-1)
+				tidx.append(t.size-2)
 			else:
-				tidx.append(np.argmax(t>teval[i]))
+				tidx.append(np.argmax(t>teval[i])-1)
 		tidx = np.array(tidx)
 	M = np.array([[1,   0,   0, -10,  15,  -6],
 		 		  [0,   0,   0,  10, -15,   6],
@@ -248,47 +250,152 @@ def hermite(p,v,a,t,teval,nderiv=0):
 	result = np.array(result)
 	return result
 
-# Calculates the hermite coefficients (velocity and acceleration) given a list of positions
-def calcHermite(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), a0=np.zeros((1,3)), aT=np.zeros((1,3))):
+
+def calcHermiteQP(p, v0=np.zeros((1,3)), vT=np.zeros((1,3))):
 
 	p = np.array(p)
 	v0 = np.array(v0)
 	vT = np.array(vT)
-	a0 = np.array(a0)
-	aT = np.array(aT)
+	N = p.shape[0]-1
 
-	A, b = Ab(p,v0,vT,a0,aT)
+	# Constraints
+
+	E, d = Ab(p,v0,vT)
+	E = E[:4*(N-1)+2,:]
+	d = d[:4*(N-1)+2,:]
+
+
+	# Jerk Cost Function
+
+	Qj = np.zeros((4*N,4*N))
+	cj = np.zeros((4*N,3))
+	for i in range(N):
+
+		p0 = p[i,:]
+		p1 = p[i+1,:]
+
+		Qj[4*i+0,4*i+0] = 192
+		Qj[4*i+0,4*i+1] = 336
+		Qj[4*i+0,4*i+2] = 72
+		Qj[4*i+0,4*i+3] = -48
+
+		Qj[4*i+1,4*i+1] = 192
+		Qj[4*i+1,4*i+2] = 48
+		Qj[4*i+1,4*i+3] = -72
+
+		Qj[4*i+2,4*i+2] = 9
+		Qj[4*i+2,4*i+3] = -6
+
+		Qj[4*i+3,4*i+3] = 9
+
+		cj[4*i+0,:] = 720*(p0-p1)
+		cj[4*i+1,:] = 720*(p0-p1)
+		cj[4*i+2,:] = 120*(p0-p1)
+		cj[4*i+3,:] = -120*(p0-p1)
+
+	Qj *= 2
+
+
+	# Position Cost Function
+
+	# Qp = np.zeros((4*N,4*N))
+	# cp = np.zeros((4*N,3))
+	# for i in range(N):
+
+	# 	p0 = p[i,:]
+	# 	p1 = p[i+1,:]
+
+	# 	Qp[4*i+0,4*i+0] = 52/3465
+	# 	Qp[4*i+0,4*i+1] = -19/990
+	# 	Qp[4*i+0,4*i+2] = 23/9240
+	# 	Qp[4*i+0,4*i+3] = 13/6930
+
+	# 	Qp[4*i+1,4*i+1] = 52/3465
+	# 	Qp[4*i+1,4*i+2] = -13/6930
+	# 	Qp[4*i+1,4*i+3] = -23/9240
+
+	# 	Qp[4*i+2,4*i+2] = 1/9240
+	# 	Qp[4*i+2,4*i+3] = 1/5544
+
+	# 	Qp[4*i+3,4*i+3] = 1/9240
+
+	# 	cp[4*i+0,:] = -4/385*p0 + -5/462*p1
+	# 	cp[4*i+1,:] = -101/2310*p0 + -5/462*p1
+	# 	cp[4*i+2,:] = -37/27720*p0 + -17/27720*p1
+	# 	cp[4*i+3,:] = 1/6930*p0 + 17/27720*p1
+
+	# Qp *= 2
+
+	# a = 0
+	# Q = a*10000*Qp + (1-a)*Qj
+	# c = a*10000*cp + (1-a)*cj
+
+	Q = Qj
+	c = cj
+
+	# Quadratic Programming Formula
+
+	cost = np.concatenate((Q, E.T), axis=1)
+	constraints = np.concatenate((E, np.zeros((E.shape[0],E.shape[0]))), axis=1)
+	A = np.concatenate((cost, constraints), axis=0)
+	b = np.concatenate((-c, d), axis=0)
+
+	x = np.linalg.solve(A,b)
+
+	v = np.zeros((N+1,3))
+	a = np.zeros((N+1,3))
+	for i in range(N):
+		v[i,:] = x[4*i,:]
+		a[i,:] = x[4*i+2,:]
+	v[N,:] = x[4*(N-1)+1,:]
+	a[N,:] = x[4*(N-1)+3,:]
+
+	return (p,v,a)
+
+
+
+# Calculates the hermite coefficients (velocity and acceleration) given a list of positions
+def calcHermite(p, v0=np.zeros((1,3)), vT=np.zeros((1,3))):
+
+	p = np.array(p)
+	v0 = np.array(v0)
+	vT = np.array(vT)
+	N = p.shape[0]-1
+
+	A, b = Ab(p,v0,vT)
 
 	c = np.linalg.solve(A,b)
 
-	N = p.shape[0]
-	v = np.zeros((N,3))
-	a = np.zeros((N,3))
+	v = np.zeros((N+1,3))
+	a = np.zeros((N+1,3))
 	for i in range(N):
 		v[i,:] = c[4*i,:]
 		a[i,:] = c[4*i+2,:]
-	v[N-1,:] = c[4*(N-1)+1,:]
-	a[N-1,:] = c[4*(N-1)+3,:]
+	v[N,:] = c[4*(N-1)+1,:]
+	a[N,:] = c[4*(N-1)+3,:]
 
 	return (p,v,a)
 
 
 # Calculates the A and b matrices for a Hermite Spline given a list of knots
-def Ab(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), a0=np.zeros((1,3)), aT=np.zeros((1,3))):
+def Ab(p, v0=np.zeros((1,3)), vT=np.zeros((1,3))):
 
-	N = p.shape[0]
+	N = p.shape[0]-1
 	A = np.zeros((4*N,4*N))
 	b = np.zeros((4*N,3))
 
 	# Main Equations
-	for i in range(N-2):
+	for i in range(N-1):
 
+		# v_{j}(1) = v_{j+1}(0)
 		A[4*i,4*i+1] = 1
 		A[4*i,4*(i+1)] = -1
 
+		# a_{j}(1) = a_{j+1}(0)
 		A[4*i+1,4*i+3] = 1
 		A[4*i+1,4*(i+1)+2] = -1
 
+		# Continuous 3rd Derivative
 		A[4*i+2,4*i] = 24
 		A[4*i+2,4*i+1] = 36
 		A[4*i+2,4*i+2] = 3
@@ -299,55 +406,65 @@ def Ab(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), a0=np.zeros((1,3)), aT=np.zero
 		A[4*i+2,4*(i+1)+3] = 3
 		b[4*i+2,:] = 60*(-p[i,:]+2*p[i+1,:]-p[i+2,:])
 
-		A[4*i+3,4*i] = 168
-		A[4*i+3,4*i+1] = 192
-		A[4*i+3,4*i+2] = 24
-		A[4*i+3,4*i+3] = -36
-		A[4*i+3,4*(i+1)] = -192
-		A[4*i+3,4*(i+1)+1] = -168
-		A[4*i+3,4*(i+1)+2] = 36
-		A[4*i+3,4*(i+1)+3] = -24
-		b[4*i+3,:] = 360*(p[i,:]-p[i+2,:])
+		# Continuous 4th Derivative
+		# A[4*i+3,4*i] = 168
+		# A[4*i+3,4*i+1] = 192
+		# A[4*i+3,4*i+2] = 24
+		# A[4*i+3,4*i+3] = -36
+		# A[4*i+3,4*(i+1)] = -192
+		# A[4*i+3,4*(i+1)+1] = -168
+		# A[4*i+3,4*(i+1)+2] = 36
+		# A[4*i+3,4*(i+1)+3] = -24
+		# b[4*i+3,:] = 360*(p[i,:]-p[i+2,:])
 
-	# Set Start and End Velocity and Acceleration
-	A[4*(N-2),0] = 1
-	b[4*(N-2),:] = v0.reshape((1,3))
+		# Catmull-Rom
+		A[4*i+3,4*i+1] = 1
+		b[4*i+3,:] = 0.5 * (p[i+2,:]-p[i,:])
 
-	A[4*(N-2)+1,4*(N-1)] = 1
-	b[4*(N-2)+1,:] = vT.reshape((1,3))
 
-	A[4*(N-2)+2,2] = 1
-	b[4*(N-2)+2,:] = a0.reshape((1,3))
+	# Set Start Velocity
+	ca = 0
+	A[4*(N-1)+ca,0] = 1
+	b[4*(N-1)+ca,:] = v0.reshape((1,3))
 
-	A[4*(N-2)+3,4*(N-1)+3] = 1
-	b[4*(N-2)+3,:] = aT.reshape((1,3))
+	# Set End Velocity
+	cb = 1
+	A[4*(N-1)+cb,4*(N-1)+1] = 1
+	b[4*(N-1)+cb,:] = vT.reshape((1,3))
 
-	# Add Extra Constraint so A is nxn
-	A[4*(N-1),0] = -36
-	A[4*(N-1),1] = -24
-	A[4*(N-1),2] = -9
-	A[4*(N-1),3] = 3
-	b[4*(N-1),:] = 60*(p[0,:]-p[1,:])
 
-	A[4*(N-1)+1,4*(N-1)] = -24
-	A[4*(N-1)+1,4*(N-1)+1] = -36
-	A[4*(N-1)+1,4*(N-1)+2] = -3
-	A[4*(N-1)+1,4*(N-1)+3] = 9
-	b[4*(N-1)+1,:] = 60*(p[N-2,:]-p[N-1,:])
+	# Extra constraints (removed in optimization approach)
 
-	A[4*(N-1)+2,0] = -192
-	A[4*(N-1)+2,1] = -168
-	A[4*(N-1)+2,2] = 36
-	A[4*(N-1)+2,3] = -24
-	b[4*(N-1)+2,:] = 360*(p[1,:]-p[0,:])
 
-	A[4*(N-1)+3,4*(N-1)] = -168
-	A[4*(N-1)+3,4*(N-1)+1] = -192
-	A[4*(N-1)+3,4*(N-1)+2] = -24
-	A[4*(N-1)+3,4*(N-1)+3] = 36
-	b[4*(N-1)+3,:] = 360*(p[N-2,:]-p[N-1,:])
+	# Set Start Acceleration to 0
+	# cc = 2
+	# A[4*(N-1)+cc,2] = 1
+	# b[4*(N-1)+cc,:] = np.zeros((1,3))
+
+	# Set End Acceleration to 0
+	cd = 2
+	A[4*(N-1)+cd,4*(N-1)+3] = 1
+	b[4*(N-1)+cd,:] = np.zeros((1,3))
+
+
+	# Set Start Jerk to 0
+	# ce = 3
+	# A[4*(N-1)+ce,0] = -36
+	# A[4*(N-1)+ce,1] = -24
+	# A[4*(N-1)+ce,2] = -9
+	# A[4*(N-1)+ce,3] = 3
+	# b[4*(N-1)+ce,:] = 60*(p[0,:]-p[1,:])
+
+	# Set End Jerk to 0
+	cf = 3
+	A[4*(N-1)+cf,4*(N-1)] = -24
+	A[4*(N-1)+cf,4*(N-1)+1] = -36
+	A[4*(N-1)+cf,4*(N-1)+2] = -3
+	A[4*(N-1)+cf,4*(N-1)+3] = 9
+	b[4*(N-1)+cf,:] = 60*(p[N-2,:]-p[N-1,:])
 
 	return (A,b)
+
 
 def nPr(n,r):
 	if r > n:
@@ -446,13 +563,13 @@ def test_prunePath():
 	print(newt)
 
 
-def test_spline(map=create_map()):
-	planner = Planner()
+def test_spline():
+	planner = Planner(map=create_map())
 	planner.pos = np.array([2,2,0])
-	planner.targetpos = np.array([3,3,0])
-	planner.vel = np.array([1,0,0])
-	import pdb; pdb.set_trace()
-	planner.spline()
+	planner.targetpos = np.array([0,0,0])
+	planner.vel = np.array([0,0,0])
+	planner.targetvel = np.array([0,0,0])
+	planner.spline(dt=0.01)
 	plotPaths((planner.p, planner.roughpath))
 
 

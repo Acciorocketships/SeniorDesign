@@ -299,6 +299,7 @@ def plotPaths(paths):
 	ax = fig.add_subplot(111, projection='3d')
 	for i in range(len(paths)):
 		ax.plot(paths[i][:,0],paths[i][:,1],paths[i][:,2],'o-')
+	ax.axis('equal')
 	plt.show()
 
 
