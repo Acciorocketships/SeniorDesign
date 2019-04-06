@@ -4,6 +4,20 @@ import os
 import cv2
 
 '''
+general math tool functions -------------------------------------------------------------------------------------------------
+'''
+
+def round_down_multiple_of(to_round, base):
+    multiplier = int(to_round/base)
+    return multiplier * base
+
+def round_up_multiple_of(to_round, base):
+    multiplier = int(to_round/base) + 1
+    return multiplier * base
+
+
+
+'''
 linear algebra matrix tool functions -------------------------------------------------------------------------------------------------
 '''
 
@@ -82,6 +96,10 @@ def rmatrix_to_vector(v, angle):
     result = matrix_add(identity(), first)
     return matrix_add(result, second)
 
+
+'''
+TODO fix this
+'''
 def normalize_matrix(matrix, high, low):
     i, j = np.shape(matrix)
     highest = -float("inf")
@@ -90,13 +108,20 @@ def normalize_matrix(matrix, high, low):
         highest = max(highest, max(matrix[x]))
         lowest = min(lowest, min(matrix[x]))
 
+    print(highest)
+    print(lowest)
+
     current = highest - lowest
     available = high - low
     result = np.zeros((i, j))
 
     for x in range(i):
         for y in range(j):
-            result[x][y] = (matrix[x][y] - lowest)/current * available + low
+            if matrix[x][y] != 0:
+                result[x][y] = 255 - int(float(matrix[x][y] - lowest)/current * available + low)
+            else:
+                result[x][y] = 0
+    print(result)
     return result
 
 def make_greyscale(arr):
@@ -186,6 +211,8 @@ Purpose: given list of points, find 2 points that defines the box that bounds al
 points = list of tuples of xyz
 '''
 def find_min_max(points_list):
+    if len(points_list) == 0:
+        return (0, 0), (0, 0), (0, 0)
     min_x = min([tup[0] for tup in points_list])
     max_x = max([tup[0] for tup in points_list])
     min_y = min([tup[1] for tup in points_list])
@@ -193,6 +220,13 @@ def find_min_max(points_list):
     min_z = min([tup[2] for tup in points_list])
     max_z = max([tup[2] for tup in points_list])
     return (min_x, max_x), (min_y, max_y), (min_z, max_z)
+
+def find_bounding_box_center(points_list):
+    x, y, z = tools.find_min_max(agent_cloud)
+    mid_x = (x[0] + x[1])/2
+    mid_y = (y[0] + y[1])/2
+    mid_z = (z[0] + z[1])/2
+    return (x, y, z)
 
 def pts_dist(pt1, pt2):
     x = pt1[0] - pt2[0]
@@ -216,13 +250,12 @@ def in_coords(frame, pt):
 '''
 saved = file containing 4 numbers on each line to identify agent locations
 '''
-def read_agents(self, saved="s.txt"):
-    results = []
+def read_agents(saved="s.txt"):
+    results = dict()
+    counter = 0
     with open(saved, "r") as f:
         for line in f:
-            results.append(line.split())
-    return result
-
-
-
+            results[counter] =line.split()
+            counter+= 1
+    return results
 
