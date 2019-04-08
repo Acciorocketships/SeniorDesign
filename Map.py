@@ -35,36 +35,65 @@ class Map:
 		return cost
 
 
-	def plotObects(self, t=0):
+	# Plot all objects at all points in time
+	def plotObjects(self, t=0, ax=None):
 		if not isinstance(t, np.ndarray):
 			t = np.array([t])
 		t = np.reshape(t,(-1,))
-		fig = plt.figure()
-		ax = fig.add_subplot(111, projection='3d')
+		if ax is None:
+			fig = plt.figure()
+			axis = fig.add_subplot(111, projection='3d')
+		else:
+			axis = ax
 		for obj in self.objects:
 			if obj.type == 0:
 				color = np.random.rand(3)
+				path = []
 				for i in range(t.size):
 					pos = obj.pos(t[i])
-					ax.plot([pos[0]], [pos[1]], [pos[2]], 'o', c=color, alpha=(i+1)/t.size)
+					axis.plot(pos[:,0], pos[:,1], pos[:,2], 'o', c=color, alpha=(i+1)/t.size)
+				path = obj.pos(t)
+				axis.plot(path[:,0], path[:,1], path[:,2], '-', c=color)
+		y_limits = axis.get_ylim3d()
+		z_limits = axis.get_zlim3d()
+		zavg = (z_limits[0] + z_limits[1]) / 2
+		ydist = (y_limits[1] - y_limits[0]) / 2
+		axis.set_zlim3d([zavg - ydist, zavg + ydist])
+		if ax is not None:
+			plt.show()
+		return axis
 
 
-	def plot(self,T=3,lim=[-5,5,-5,5],plane=[0,1]):
+	# Plot all objects with a time slider
+	def plot(self,T=3,lim=[-5,5,-5,5,-5,5],plane=None):
 		self.plane = plane
-		self.fig, ax = plt.subplots()
+		self.fig = plt.figure()
+		if plane is None:
+			axis = self.fig.add_subplot(111, projection='3d')
+		else:
+			axis = self.fig.add_subplot(111)
 		plt.xlim(lim[0],lim[1])
 		plt.ylim(lim[2],lim[3])
+		if plane is None:
+			axis.set_zlim(lim[4],lim[5])
 		plt.subplots_adjust(bottom=0.25)
 		colors = [np.random.rand(3) for i in range(len(self.objects))]
 		self.axes = [None for i in range(len(self.objects))]
 		for i, obj in enumerate(self.objects):
 			pos = obj.pos(0)
 			if obj.type == 0:
-				self.axes[i] = plt.plot(pos[plane[0]], pos[plane[1]], 'o', c=colors[i])[0]
+				if self.plane is None:
+					self.axes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], 'o', c=colors[i])[0]
+				else:
+					self.axes[i] = plt.plot(pos[:,plane[0]], pos[:,plane[1]], 'o', c=colors[i])[0]
 			else:
-				self.axes[i] = plt.plot(pos[plane[0]], pos[plane[1]], '*', c=colors[i])[0]
 				dest = obj.pos(T)
-				plt.plot(dest[plane[0]],dest[plane[1]],'k.')
+				if self.plane is None:
+					self.axes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], '*', c=colors[i])[0]
+					plt.plot(dest[:,0], dest[:,1], dest[:,2],'k.')
+				else:
+					self.axes[i] = plt.plot(pos[:,plane[0]], pos[:,plane[1]], '*', c=colors[i])[0]
+					plt.plot(dest[:,plane[0]],dest[:,plane[1]],'k.')
 		axt = plt.axes([0.125, 0.1, 0.775, 0.03])
 		tslider = Slider(axt, 'Time', 0, T, valinit=0)
 		tslider.on_changed(self.update)
@@ -74,9 +103,14 @@ class Map:
 	def update(self,t):
 		for i, obj in enumerate(self.objects):
 			pos = obj.pos(t)
-			self.axes[i].set_xdata(pos[self.plane[0]])
-			self.axes[i].set_ydata(pos[self.plane[1]])
-		self.fig.canvas.draw_idle()
+			if self.plane is not None:
+				self.axes[i].set_xdata(pos[:,self.plane[0]])
+				self.axes[i].set_ydata(pos[:,self.plane[1]])
+			else:
+				self.axes[i].set_xdata(pos[:,0])
+				self.axes[i].set_ydata(pos[:,1])
+				self.axes[i].set_3d_properties(pos[:,2])
+		plt.draw()
 
 
 
@@ -137,28 +171,24 @@ class Object:
 
 	# Predicts the position of the object given its initial pos, vel, accel
 	def extrapolate(self,t):
-		return self.position + self.velocity * t + self.acceleration * 0.5 * t**2
+		t = np.array(t)
+		t = t.reshape((t.size,1))
+		return self.position * np.ones(t.shape) + self.velocity * t + self.acceleration * 0.5 * t**2
 
 
 	def pathpos(self,t):
-		ilow = floor(t/self.tRes)
-		ihigh = ceil(t/self.tRes)
-		if ilow < 0:
-			return self.path[0,:]
-		if ihigh >= self.path.shape[0]:
-			return self.path[-1,:]
+		t = np.array(t)
+		t = t.reshape((t.size,))
+		t = np.maximum(np.minimum(t, self.tRes*(self.path.shape[0]-1)*np.ones(t.shape)), np.zeros(t.shape))
+		ilow = np.floor(t/self.tRes).astype(np.int)
+		ihigh = np.ceil(t/self.tRes).astype(np.int)
 		u = (t - self.tRes * ilow) / self.tRes
-		return ((1-u) * self.path[ilow,:]) + (u * self.path[ihigh,:])
+		pos = np.multiply(self.path[ilow,:].T, (1-u)).T + np.multiply(self.path[ihigh,:].T, u).T
+		return pos
 
 
 	def distance(self,pos1,pos2):
 		return np.linalg.norm(np.array(pos1)-np.array(pos2))
-
-
-	def discretize(self,val,step):
-		for i in range(len(val)):
-			val[i] = round(val[i] / step) * step
-		return val
 
 
 	def nextpos(self,pos,step):
@@ -191,7 +221,7 @@ class Object:
 
 		# Starting point
 		ties = count()
-		pos = self.discretize(self.position,step)
+		pos = discretize(self.position,step)
 		heuristic = self.distance(pos,destination)
 		data = {'pos': pos, 't': 0, 'togo': heuristic, 'dist': 0, 'J': 0, 'prox': 0, 'prev': None}
 		J = heuristic
@@ -292,15 +322,92 @@ def totuple(arr):
 	return tuple(np.reshape(arr,(-1,)))
 
 
-def plotPaths(paths):
+def discretize(val,step):
+	for i in range(len(val)):
+		val[i] = np.round(val[i] / step) * step
+	return val
+
+# Plot a path or list of paths on the given axes
+def plotPaths(paths, line='o-', ax=None):
 	if type(paths) != tuple:
 		paths = (paths,)
-	fig = plt.figure()
-	ax = fig.add_subplot(111, projection='3d')
+	if ax is None:
+		fig = plt.figure()
+		axis = fig.add_subplot(111, projection='3d')
+	else:
+		axis = ax
 	for i in range(len(paths)):
-		ax.plot(paths[i][:,0],paths[i][:,1],paths[i][:,2],'o-')
-	ax.axis('equal')
-	plt.show()
+		axis.plot(paths[i][:,0],paths[i][:,1],paths[i][:,2],line)
+	y_limits = axis.get_ylim3d()
+	z_limits = axis.get_zlim3d()
+	zavg = (z_limits[0] + z_limits[1]) / 2
+	ydist = (y_limits[1] - y_limits[0]) / 2
+	axis.set_zlim3d([zavg - ydist, zavg + ydist])
+	if ax is not None:
+		plt.show()
+	return axis
+
+# Viewer for objects and agents, with a time slider
+class Viewer:
+
+	def __init__(self,path,t,map):
+		self.path=path
+		self.t=t
+		self.map=map
+
+	def show(self,lim=[-3,3,-3,3,-3,3]):
+
+		# Setup
+		self.fig = plt.figure()
+		self.axis = self.fig.add_subplot(111, projection='3d')
+		self.axis.set_xlim(lim[0],lim[1])
+		self.axis.set_ylim(lim[2],lim[3])
+		self.axis.set_zlim(lim[4],lim[5])
+		plt.subplots_adjust(bottom=0.1)
+		plt.subplots_adjust(left=0)
+		plt.subplots_adjust(top=1)
+		plt.subplots_adjust(right=1)
+		self.axis.view_init(self.angle(0)[0], self.angle(0)[1])
+		T = self.t[-1]
+
+		# Plot Objects
+		colors = [np.random.rand(3) for i in range(len(self.map.objects))]
+		self.objaxes = [None for i in range(len(self.map.objects))]
+		for i, obj in enumerate(self.map.objects):
+			pos = obj.pos(0)
+			if obj.type == 0:
+				self.objaxes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], 'o', c=colors[i])[0]
+			else:
+				dest = obj.pos(T)
+				self.objaxes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], '*', c=colors[i])[0]
+				plt.plot(dest[:,0], dest[:,1], dest[:,2],'.', c=colors[i])
+
+		# Plot Agent
+		self.agentaxes = plt.plot([self.path[0,0]],[self.path[0,1]],[self.path[0,2]], 'bX')[0]
+		plt.plot(self.path[:,0],self.path[:,1],self.path[:,2], '--')
+		plt.plot([self.path[-1,0]],[self.path[-1,1]],[self.path[-1,2]], 'rs')
+
+		# Update Callback
+		axt = plt.axes([0.125, 0.01, 0.775, 0.03])
+		tslider = Slider(axt, 'Time', 0, T, valinit=0)
+		tslider.on_changed(self.callback)
+		plt.show()
+
+	def angle(self,t):
+		return [45-5*t, -66+30*t]
+
+	def callback(self,t):
+		tidx = np.argmax(self.t>t)-1
+		self.agentaxes.set_xdata(self.path[tidx,0])
+		self.agentaxes.set_ydata(self.path[tidx,1])
+		self.agentaxes.set_3d_properties(self.path[tidx,2])
+		for i, obj in enumerate(self.map.objects):
+			pos = obj.pos(t)
+			self.objaxes[i].set_xdata(pos[:,0])
+			self.objaxes[i].set_ydata(pos[:,1])
+			self.objaxes[i].set_3d_properties(pos[:,2])
+		self.axis.view_init(self.angle(t)[0], self.angle(t)[1])
+		plt.draw()
 
 
 
@@ -309,50 +416,50 @@ if __name__ == '__main__':
 	m = Map()
 
 	o1 = Object(m)
-	o1.position = np.array([0,1,0])
-	o1.velocity = np.array([-0.5,1,0])
+	o1.position = np.array([0,1,2])
+	o1.velocity = np.array([-0.5,1,-0.4])
 	m.objects.add(o1)
 
 	o2 = Object(m)
-	o2.position = np.array([-1,3,0])
-	o2.velocity = np.array([-1,-0.5,0])
+	o2.position = np.array([-1,3,-1])
+	o2.velocity = np.array([-1,-0.5,0.2])
 	m.objects.add(o2)
 
 	o3 = Object(m)
-	o3.position = np.array([-1.5,1.5,0])
-	o3.velocity = np.array([0.5,0.5,0])
+	o3.position = np.array([-1.5,1.5,0.5])
+	o3.velocity = np.array([0.5,0.5,-0.1])
 	m.objects.add(o3)
 
 	o4 = Object(m)
-	o4.position = np.array([0.8,-0.6,0])
-	o4.velocity = np.array([-0.5,0.5,0])
+	o4.position = np.array([0.8,-0.6,-1.5])
+	o4.velocity = np.array([-0.5,0.5,0.5])
 	m.objects.add(o4)
 
 	o5 = Object(m)
 	o5.position = np.array([0.5,0.7,0])
-	o5.velocity = np.array([0.2,-0.4,0])
+	o5.velocity = np.array([0.2,-0.4,0.2])
 	m.objects.add(o5)
 
 	o6 = Object(m)
-	o6.position = np.array([-0.2,-0.5,0])
-	o6.velocity = np.array([1,0,0])
+	o6.position = np.array([-0.2,-0.5,0.3])
+	o6.velocity = np.array([1,0,0.1])
 	m.objects.add(o6)
 
 	o7 = Object(m)
-	o7.position = np.array([-0.7,0,0])
-	o7.velocity = np.array([0.8,0.4,0])
+	o7.position = np.array([-0.7,0,0.4])
+	o7.velocity = np.array([0.8,0.4,-0.1])
 	m.objects.add(o7)
 
 	o = Object(m)
 	o.type = 1
-	o.velocity = np.array([2,0,0])
-	o.position = np.array([0,0,0])
+	o.speed = 1
+	o.position = np.array([-1,0,0])
 	m.objects.add(o)
 
-	dest = np.array([1,1.5,0])
+	dest = np.array([1,1.5,1])
 	path, t, dist, J, prox, togo = o.pathplan(destination=dest,dt=0.1,returnlevel=2)
 
-	m.plot(T=t[-1],lim=[-3,3,-1,6])
+	m.plot(T=t[-1],lim=[-3,3,-1,5,-3,3])
 
 	f = plt.figure()
 	f.add_subplot(2,2,1)
@@ -369,7 +476,7 @@ if __name__ == '__main__':
 	plt.title("Dist to Go")
 	plt.show()
 
-	m.plotObects(t)
+	m.plotObjects(t)
 	plt.plot(path[:,0],path[:,1])
 	plt.xlim(-4,4)
 	plt.ylim(-4,4)
