@@ -146,7 +146,7 @@ def hermite(p,v,a,t,teval,nderiv=0,equalsteps=False):
 					  nPr(3,nderiv) * (u ** max(0,3-nderiv)),
 					  nPr(4,nderiv) * (u ** max(0,4-nderiv)),
 					  nPr(5,nderiv) * (u ** max(0,5-nderiv))])
-		result.append(G.dot(M.dot(U)))
+		result.append(G.matmul(M.matmul(U)))
 	result = np.array(result)
 	return result
 
