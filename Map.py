@@ -1,14 +1,16 @@
+from __future__ import division
+from __future__ import absolute_import
 try:
 	import pcl
 except:
-	print('Could not import PCL')
+	print u'Could not import PCL'
 import numpy as np
 from math import *
 from itertools import count
 try:
 	from Queue import PriorityQueue # Python 2
 except:
-	from queue import PriorityQueue # Python 3
+	from Queue import PriorityQueue # Python 3
 from GaussND import *
 from matplotlib.widgets import Slider
 from matplotlib import pyplot as plt
@@ -17,7 +19,7 @@ from mpl_toolkits.mplot3d import Axes3D
 # https://nlesc.github.io/python-pcl/
 
 
-class Map:
+class Map(object):
 
 	def __init__(self):
 
@@ -42,18 +44,18 @@ class Map:
 		t = np.reshape(t,(-1,))
 		if ax is None:
 			fig = plt.figure()
-			axis = fig.add_subplot(111, projection='3d')
+			axis = fig.add_subplot(111, projection=u'3d')
 		else:
 			axis = ax
 		for obj in self.objects:
 			if obj.type == 0:
 				color = np.random.rand(3)
 				path = []
-				for i in range(t.size):
+				for i in xrange(t.size):
 					pos = obj.pos(t[i])
-					axis.plot(pos[:,0], pos[:,1], pos[:,2], 'o', c=color, alpha=(i+1)/t.size)
+					axis.plot(pos[:,0], pos[:,1], pos[:,2], u'o', c=color, alpha=(i+1)/t.size)
 				path = obj.pos(t)
-				axis.plot(path[:,0], path[:,1], path[:,2], '-', c=color)
+				axis.plot(path[:,0], path[:,1], path[:,2], u'-', c=color)
 		y_limits = axis.get_ylim3d()
 		z_limits = axis.get_zlim3d()
 		zavg = (z_limits[0] + z_limits[1]) / 2
@@ -69,7 +71,7 @@ class Map:
 		self.plane = plane
 		self.fig = plt.figure()
 		if plane is None:
-			axis = self.fig.add_subplot(111, projection='3d')
+			axis = self.fig.add_subplot(111, projection=u'3d')
 		else:
 			axis = self.fig.add_subplot(111)
 		plt.xlim(lim[0],lim[1])
@@ -77,25 +79,25 @@ class Map:
 		if plane is None:
 			axis.set_zlim(lim[4],lim[5])
 		plt.subplots_adjust(bottom=0.25)
-		colors = [np.random.rand(3) for i in range(len(self.objects))]
-		self.axes = [None for i in range(len(self.objects))]
+		colors = [np.random.rand(3) for i in xrange(len(self.objects))]
+		self.axes = [None for i in xrange(len(self.objects))]
 		for i, obj in enumerate(self.objects):
 			pos = obj.pos(0)
 			if obj.type == 0:
 				if self.plane is None:
-					self.axes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], 'o', c=colors[i])[0]
+					self.axes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], u'o', c=colors[i])[0]
 				else:
-					self.axes[i] = plt.plot(pos[:,plane[0]], pos[:,plane[1]], 'o', c=colors[i])[0]
+					self.axes[i] = plt.plot(pos[:,plane[0]], pos[:,plane[1]], u'o', c=colors[i])[0]
 			else:
 				dest = obj.pos(T)
 				if self.plane is None:
-					self.axes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], '*', c=colors[i])[0]
-					plt.plot(dest[:,0], dest[:,1], dest[:,2],'k.')
+					self.axes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], u'*', c=colors[i])[0]
+					plt.plot(dest[:,0], dest[:,1], dest[:,2],u'k.')
 				else:
-					self.axes[i] = plt.plot(pos[:,plane[0]], pos[:,plane[1]], '*', c=colors[i])[0]
-					plt.plot(dest[:,plane[0]],dest[:,plane[1]],'k.')
+					self.axes[i] = plt.plot(pos[:,plane[0]], pos[:,plane[1]], u'*', c=colors[i])[0]
+					plt.plot(dest[:,plane[0]],dest[:,plane[1]],u'k.')
 		axt = plt.axes([0.125, 0.1, 0.775, 0.03])
-		tslider = Slider(axt, 'Time', 0, T, valinit=0)
+		tslider = Slider(axt, u'Time', 0, T, valinit=0)
 		tslider.on_changed(self.update)
 		plt.show()
 
@@ -117,7 +119,7 @@ class Map:
 
 
 
-class Object:
+class Object(object):
 
 	def __init__(self, map=None):
 
@@ -156,7 +158,7 @@ class Object:
 	def proxCost(self,pos,t=0):
 		disp = self.distance(pos,self.pos(t))
 		if disp < self.radius:
-			return float('inf')
+			return float(u'inf')
 		else:
 			return self.gaussian[np.reshape(pos-self.pos(t),(-1,3))]
 
@@ -223,19 +225,19 @@ class Object:
 		ties = count()
 		pos = discretize(self.position,step)
 		heuristic = self.distance(pos,destination)
-		data = {'pos': pos, 't': 0, 'togo': heuristic, 'dist': 0, 'J': 0, 'prox': 0, 'prev': None}
+		data = {u'pos': pos, u't': 0, u'togo': heuristic, u'dist': 0, u'J': 0, u'prox': 0, u'prev': None}
 		J = heuristic
-		initial = (J, next(ties), data)
+		initial = (J, ties.next(), data)
 		frontier.put(initial)
 
 		# Path planning
-		for i in range(maxsteps):
+		for i in xrange(maxsteps):
 			# Pop Next Value
 			J, _, data = frontier.get()
-			idx = int(data['t'] / self.tRes)
-			pos = data['pos']
+			idx = int(data[u't'] / self.tRes)
+			pos = data[u'pos']
 			# Check if Visited
-			if visited.get(totuple(pos),float('inf')) > J:
+			if visited.get(totuple(pos),float(u'inf')) > J:
 				visited[totuple(pos)] = J
 			else:
 				continue
@@ -243,13 +245,13 @@ class Object:
 				break
 			# Add Children to Frontier
 			for nextpos in self.nextpos(pos,step):
-				nextt = data['t'] + self.tRes
-				nextdist = data['dist'] + self.distance(nextpos,pos)
+				nextt = data[u't'] + self.tRes
+				nextdist = data[u'dist'] + self.distance(nextpos,pos)
 				nextProx = self.m.proxCost(pos=nextpos,t=nextt,ignore=self)
 				heuristic = self.distance(nextpos,destination)
 
 				vel = (nextpos-pos)
-				lastvel = (pos - data['prev']['pos']) if data['prev'] != None else self.velocity / self.speed * np.linalg.norm(vel)
+				lastvel = (pos - data[u'prev'][u'pos']) if data[u'prev'] != None else self.velocity / self.speed * np.linalg.norm(vel)
 				mag = np.linalg.norm(vel) * np.linalg.norm(lastvel)
 				dirchange = (1 - np.dot(vel,lastvel) / mag) if mag != 0 else 0
 
@@ -260,14 +262,14 @@ class Object:
 						self.Cprox * nextProx + \
 						self.Cdir * dirchange
 
-				nextdata = {'pos': nextpos, 
-							't': nextt,
-							'togo': self.Cheur * (heuristic / totaldist), 
-							'dist': nextdist / totaldist, 
-							'J': nextJ, 
-							'prox': self.Cprox * nextProx, 
-							'prev': data}
-				frontier.put((nextJ, next(ties), nextdata))
+				nextdata = {u'pos': nextpos, 
+							u't': nextt,
+							u'togo': self.Cheur * (heuristic / totaldist), 
+							u'dist': nextdist / totaldist, 
+							u'J': nextJ, 
+							u'prox': self.Cprox * nextProx, 
+							u'prev': data}
+				frontier.put((nextJ, ties.next(), nextdata))
 		
 		# Convert Linked List to NP Array
 		curr = data
@@ -280,15 +282,15 @@ class Object:
 			prox = []
 			togo = []
 		while not np.all(curr == None):
-			path.append(curr['pos'])
+			path.append(curr[u'pos'])
 			if returnlevel > 0:
-				t.append(curr["t"])
+				t.append(curr[u"t"])
 			if returnlevel > 1:
-				dist.append(curr['dist'])
-				J.append(curr["J"])
-				prox.append(curr["prox"])
-				togo.append(curr["togo"])
-			curr = curr['prev']
+				dist.append(curr[u'dist'])
+				J.append(curr[u"J"])
+				prox.append(curr[u"prox"])
+				togo.append(curr[u"togo"])
+			curr = curr[u'prev']
 		path.reverse()
 		if returnlevel > 0:
 			t.reverse()
@@ -323,20 +325,20 @@ def totuple(arr):
 
 
 def discretize(val,step):
-	for i in range(len(val)):
+	for i in xrange(len(val)):
 		val[i] = np.round(val[i] / step) * step
 	return val
 
 # Plot a path or list of paths on the given axes
-def plotPaths(paths, line='o-', ax=None):
+def plotPaths(paths, line=u'o-', ax=None):
 	if type(paths) != tuple:
 		paths = (paths,)
 	if ax is None:
 		fig = plt.figure()
-		axis = fig.add_subplot(111, projection='3d')
+		axis = fig.add_subplot(111, projection=u'3d')
 	else:
 		axis = ax
-	for i in range(len(paths)):
+	for i in xrange(len(paths)):
 		axis.plot(paths[i][:,0],paths[i][:,1],paths[i][:,2],line)
 	y_limits = axis.get_ylim3d()
 	z_limits = axis.get_zlim3d()
@@ -348,7 +350,7 @@ def plotPaths(paths, line='o-', ax=None):
 	return axis
 
 # Viewer for objects and agents, with a time slider
-class Viewer:
+class Viewer(object):
 
 	def __init__(self,path,t,map):
 		self.path=path
@@ -359,7 +361,7 @@ class Viewer:
 
 		# Setup
 		self.fig = plt.figure()
-		self.axis = self.fig.add_subplot(111, projection='3d')
+		self.axis = self.fig.add_subplot(111, projection=u'3d')
 		self.axis.set_xlim(lim[0],lim[1])
 		self.axis.set_ylim(lim[2],lim[3])
 		self.axis.set_zlim(lim[4],lim[5])
@@ -371,25 +373,25 @@ class Viewer:
 		T = self.t[-1]
 
 		# Plot Objects
-		colors = [np.random.rand(3) for i in range(len(self.map.objects))]
-		self.objaxes = [None for i in range(len(self.map.objects))]
+		colors = [np.random.rand(3) for i in xrange(len(self.map.objects))]
+		self.objaxes = [None for i in xrange(len(self.map.objects))]
 		for i, obj in enumerate(self.map.objects):
 			pos = obj.pos(0)
 			if obj.type == 0:
-				self.objaxes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], 'o', c=colors[i])[0]
+				self.objaxes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], u'o', c=colors[i])[0]
 			else:
 				dest = obj.pos(T)
-				self.objaxes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], '*', c=colors[i])[0]
-				plt.plot(dest[:,0], dest[:,1], dest[:,2],'.', c=colors[i])
+				self.objaxes[i] = plt.plot(pos[:,0], pos[:,1], pos[:,2], u'*', c=colors[i])[0]
+				plt.plot(dest[:,0], dest[:,1], dest[:,2],u'.', c=colors[i])
 
 		# Plot Agent
-		self.agentaxes = plt.plot([self.path[0,0]],[self.path[0,1]],[self.path[0,2]], 'bX')[0]
-		plt.plot(self.path[:,0],self.path[:,1],self.path[:,2], '--')
-		plt.plot([self.path[-1,0]],[self.path[-1,1]],[self.path[-1,2]], 'rs')
+		self.agentaxes = plt.plot([self.path[0,0]],[self.path[0,1]],[self.path[0,2]], u'bX')[0]
+		plt.plot(self.path[:,0],self.path[:,1],self.path[:,2], u'--')
+		plt.plot([self.path[-1,0]],[self.path[-1,1]],[self.path[-1,2]], u'rs')
 
 		# Update Callback
 		axt = plt.axes([0.125, 0.01, 0.775, 0.03])
-		tslider = Slider(axt, 'Time', 0, T, valinit=0)
+		tslider = Slider(axt, u'Time', 0, T, valinit=0)
 		tslider.on_changed(self.callback)
 		plt.show()
 
@@ -411,7 +413,7 @@ class Viewer:
 
 
 
-if __name__ == '__main__':
+if __name__ == u'__main__':
 
 	m = Map()
 
@@ -464,16 +466,16 @@ if __name__ == '__main__':
 	f = plt.figure()
 	f.add_subplot(2,2,1)
 	plt.plot(t, J)
-	plt.title("J")
+	plt.title(u"J")
 	f.add_subplot(2,2,2)
 	plt.plot(t, dist)
-	plt.title("Dist Travelled")
+	plt.title(u"Dist Travelled")
 	f.add_subplot(2,2,3)
 	plt.plot(t, prox)
-	plt.title("Proximity")
+	plt.title(u"Proximity")
 	f.add_subplot(2,2,4)
 	plt.plot(t, togo)
-	plt.title("Dist to Go")
+	plt.title(u"Dist to Go")
 	plt.show()
 
 	m.plotObjects(t)

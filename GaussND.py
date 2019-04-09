@@ -1,10 +1,15 @@
+from __future__ import division
+from __future__ import absolute_import
 from scipy.stats import multivariate_normal, _multivariate
 from scipy.optimize import fmin, fmin_slsqp
 from time import time
 import numpy as np
+from itertools import izip
+from itertools import imap
+from itertools import ifilter
 
 
-class GaussND:
+class GaussND(object):
 
 	def __init__(self,numN=[None],numC=[1],denN=[None],denC=[1]):
 		# N is a list of tuples (mu, cov)
@@ -60,14 +65,14 @@ class GaussND:
 	def multiplyPoly(self,N0,N1,C0=None,C1=None):
 		# Inputs: two lists of gaussians (N0 and N1), and their coefficients (C0 and C1)
 		# Output: tuple of list of gaussian terms and their coefficients (N, C)
-		N = [None for i in range(len(N0)*len(N1))]
-		C = [None for i in range(len(N0)*len(N1))]
+		N = [None for i in xrange(len(N0)*len(N1))]
+		C = [None for i in xrange(len(N0)*len(N1))]
 		if C0 is None:
-			C0 = [1 for i in range(len(N0))]
+			C0 = [1 for i in xrange(len(N0))]
 		if C1 is None:
-			C1 = [1 for i in range(len(N1))]
-		for i0 in range(len(N0)):
-			for i1 in range(len(N1)):
+			C1 = [1 for i in xrange(len(N1))]
+		for i0 in xrange(len(N0)):
+			for i1 in xrange(len(N1)):
 				i = i0*len(N1) + i1
 				N[i] = self.multiply(N0[i0],N1[i1])
 				C[i] = C0[i0] * C1[i1]
@@ -92,8 +97,8 @@ class GaussND:
 
 	def evaluate(self,x):
 		x = np.array(x)
-		num = sum(map(lambda term: term[0]*term[1].pdf(x) if term[1] is not None else term[0], zip(self.numC,self.numN)))
-		den = sum(map(lambda term: term[0]*term[1].pdf(x) if term[1] is not None else term[0], zip(self.denC,self.denN)))
+		num = sum(imap(lambda term: term[0]*term[1].pdf(x) if term[1] is not None else term[0], izip(self.numC,self.numN)))
+		den = sum(imap(lambda term: term[0]*term[1].pdf(x) if term[1] is not None else term[0], izip(self.denC,self.denN)))
 		return num / den
 
 
@@ -110,19 +115,19 @@ class GaussND:
 		from mayavi import mlab
 		if lim is None:
 			# Calculate limits
-			mus = np.concatenate(tuple([[N.mean] for N in filter(lambda N: N is not None, self.numN+self.denN)]), axis=0)
+			mus = np.concatenate(tuple([[N.mean] for N in ifilter(lambda N: N is not None, self.numN+self.denN)]), axis=0)
 			maxs = np.amax(mus,axis=0) + 1
 			mins = np.amin(mus,axis=0) - 1
 			s = np.amax(maxs-mins) / 2
 			mid = (maxs + mins) / 2
-			lim = [[mid[i]-1.2*s, mid[i]+1.2*s] for i in range(maxs.shape[0])]
+			lim = [[mid[i]-1.2*s, mid[i]+1.2*s] for i in xrange(maxs.shape[0])]
 		if len(lim) == 3:
 			# Evaluate
 			xi,yi,zi = np.mgrid[lim[0][0]:lim[0][1]:50j, lim[1][0]:lim[1][1]:50j, lim[2][0]:lim[2][1]:50j]
 			coords = np.vstack([item.ravel() for item in [xi, yi, zi]])
 			density = self.evaluate(coords.T).reshape(xi.shape)
 			# Plot scatter with mayavi
-			figure = mlab.figure('DensityPlot')
+			figure = mlab.figure(u'DensityPlot')
 			grid = mlab.pipeline.scalar_field(xi, yi, zi, density)
 			minval = 0
 			maxval = density.max()
@@ -139,10 +144,10 @@ class GaussND:
 			return False
 		if len(other.numC) != len(self.numC) or len(other.denC) != len(self.denC):
 			return False
-		for i in range(len(self.numC)):
+		for i in xrange(len(self.numC)):
 			if self.numC[i] != other.numC[i] or not self.equal(self.numN[i],other.numN[i]):
 				return False
-		for i in range(len(self.denC)):
+		for i in xrange(len(self.denC)):
 			if self.denC[i] != other.denC[i] or not self.equal(self.denN[i],other.denN[i]):
 				return False
 		return True
@@ -151,7 +156,7 @@ class GaussND:
 		return not self.__eq__(other)
 
 	def __neg__(self):
-		return GaussND(numC=list(map(lambda x: -x, self.numC)), numN=list(self.numN), denC=list(self.denC), denN=list(self.denN))
+		return GaussND(numC=list(imap(lambda x: -x, self.numC)), numN=list(self.numN), denC=list(self.denC), denN=list(self.denN))
 
 	def __sub__(self,other):
 		# self - other
@@ -196,7 +201,7 @@ class GaussND:
 		
 
 
-if __name__ == '__main__':
+if __name__ == u'__main__':
 	# https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.stats.multivariate_normal.html
 	# https://docs.scipy.org/doc/scipy-0.18.1/reference/optimize.html
 

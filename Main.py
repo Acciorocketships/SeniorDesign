@@ -1,28 +1,29 @@
+from __future__ import absolute_import
 from threading import Thread
 import numpy as np
 from Map import *
 from Planning import *
 
 
-class Mainloop:
+class Mainloop(object):
 
 
 	def __init__(self):
 
 		self.map = Map()
 
-		self.target = {'pos':np.zeros((3,)), 
-					   'vel':np.zeros((3,)),
-					   'speed':1}
+		self.target = {u'pos':np.zeros((3,)), 
+					   u'vel':np.zeros((3,)),
+					   u'speed':1}
 
-		self.state = {'pos':np.zeros((3,)), 
-					  'vel':np.array((3,))}
+		self.state = {u'pos':np.zeros((3,)), 
+					  u'vel':np.array((3,))}
 
-		self.path = {'x': np.zeros((0,3)),
-					 'v': np.zeros((0,3)),
-					 't': np.zeros((0,)),
-					 'roughx': np.zeros((0,3)),
-					 'rought': np.zeros((0,3))}
+		self.path = {u'x': np.zeros((0,3)),
+					 u'v': np.zeros((0,3)),
+					 u't': np.zeros((0,)),
+					 u'roughx': np.zeros((0,3)),
+					 u'rought': np.zeros((0,3))}
 
 		self.planner = Planner(map=self.map,target=self.target,state=self.state,path=self.path)
 
@@ -47,6 +48,6 @@ class Mainloop:
 
 
 
-if __name__ == '__main__':
+if __name__ == u'__main__':
 	main = Mainloop()
 	main.updatePath()

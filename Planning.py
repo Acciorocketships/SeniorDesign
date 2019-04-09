@@ -1,3 +1,5 @@
+from __future__ import division
+from __future__ import absolute_import
 from gekko import GEKKO as solver
 import numpy as np
 from matplotlib import pyplot as plt
@@ -6,7 +8,7 @@ from Map import *
 
 
 
-class Planner:
+class Planner(object):
 
 
 	def __init__(self, map=Map(), target=None, state=None, path=None):
@@ -17,26 +19,26 @@ class Planner:
 		if target is not None:
 			self.target = target
 		else:
-			self.target = {'pos':np.zeros((3,)), 
-						  'vel':np.array((3,)),
-						  'speed': 1}
+			self.target = {u'pos':np.zeros((3,)), 
+						  u'vel':np.array((3,)),
+						  u'speed': 1}
 
 		# Current State
 		if state is not None:
 			self.state = state
 		else:
-			self.state = {'pos':np.zeros((3,)), 
-						  'vel':np.array((3,))}
+			self.state = {u'pos':np.zeros((3,)), 
+						  u'vel':np.array((3,))}
 
 		# Planned Path
 		if path is not None:
 			self.path = path
 		else:
-			self.path = {'x': np.zeros((0,3)),
-						 'v': np.zeros((0,3)),
-						 't': np.zeros((0,)),
-						 'roughx': np.zeros((0,3)),
-						 'rought': np.zeros((0,3)),}
+			self.path = {u'x': np.zeros((0,3)),
+						 u'v': np.zeros((0,3)),
+						 u't': np.zeros((0,)),
+						 u'roughx': np.zeros((0,3)),
+						 u'rought': np.zeros((0,3)),}
 
 		self.p = None
 		self.v = None
@@ -50,16 +52,16 @@ class Planner:
 
 		discpath, disct = self.astar(dt=dt_astar)
 
-		self.path['roughx'], self.path['rought'] = prunePath(discpath, disct)
+		self.path[u'roughx'], self.path[u'rought'] = prunePath(discpath, disct)
 
-		p, v, a = calcHermiteQP(self.path['roughx'], v0=self.state['vel'], vT=self.target['vel'], speed=self.target['speed'])
+		p, v, a = calcHermiteQP(self.path[u'roughx'], v0=self.state[u'vel'], vT=self.target[u'vel'], speed=self.target[u'speed'])
 
 		if dt_out is not None:
-			self.path['t'] = np.arange(self.path['rought'][0], self.path['rought'][-1], dt_out)
+			self.path[u't'] = np.arange(self.path[u'rought'][0], self.path[u'rought'][-1], dt_out)
 		else:
-			self.path['t'] = self.disct
-		self.path['x'] = hermite(p=p, v=v, a=a, t=self.path['rought'], teval=self.path['t'], nderiv=0)
-		self.path['v'] = hermite(p=p, v=v, a=a, t=self.path['rought'], teval=self.path['t'], nderiv=1)
+			self.path[u't'] = self.disct
+		self.path[u'x'] = hermite(p=p, v=v, a=a, t=self.path[u'rought'], teval=self.path[u't'], nderiv=0)
+		self.path[u'v'] = hermite(p=p, v=v, a=a, t=self.path[u'rought'], teval=self.path[u't'], nderiv=1)
 
 
 
@@ -67,10 +69,10 @@ class Planner:
 	def astar(self, dt=0.1):
 
 		o = Object(self.map)
-		o.position = self.state['pos']
-		o.speed = self.target['speed']
+		o.position = self.state[u'pos']
+		o.speed = self.target[u'speed']
 		self.map.objects.add(o)
-		path, t = o.pathplan(destination=self.target['pos'], dt=dt, returnlevel=1)
+		path, t = o.pathplan(destination=self.target[u'pos'], dt=dt, returnlevel=1)
 		return (path, t)
 
 
@@ -82,7 +84,7 @@ class Planner:
 def prunePath(path,t):
 	pathout = [path[0,:]]
 	tout = [t[0]]
-	for i in range(1,path.shape[0]-1):
+	for i in xrange(1,path.shape[0]-1):
 		if not isCollinear(pathout[-1],path[i,:],path[i+1,:]):
 			pathout.append(path[i,:])
 			tout.append(t[i])
@@ -118,7 +120,7 @@ def hermite(p,v,a,t,teval,nderiv=0,equalsteps=False):
 	# Calculate the time indices for non-constant time steps
 	else:
 		tidx = []
-		for i in range(teval.size):
+		for i in xrange(teval.size):
 			if teval[i] <= t[0]:
 				tidx.append(0)
 			elif teval[i] >= t[-1]:
@@ -135,7 +137,7 @@ def hermite(p,v,a,t,teval,nderiv=0,equalsteps=False):
 	result = []
 	if len(tidx.shape)==0:
 		tidx = np.array([tidx])
-	for i in range(tidx.size-1):
+	for i in xrange(tidx.size-1):
 		G = np.stack((p[tidx[i],:], p[tidx[i]+1,:], v[tidx[i],:], v[tidx[i]+1,:], a[tidx[i],:], a[tidx[i]+1,:]), axis=1)
 		u = (teval[i]-t[tidx[i]]) / (t[tidx[i]+1]-t[tidx[i]])
 		U = np.array([nPr(0,nderiv) * (u ** max(0,0-nderiv)),
@@ -144,7 +146,7 @@ def hermite(p,v,a,t,teval,nderiv=0,equalsteps=False):
 					  nPr(3,nderiv) * (u ** max(0,3-nderiv)),
 					  nPr(4,nderiv) * (u ** max(0,4-nderiv)),
 					  nPr(5,nderiv) * (u ** max(0,5-nderiv))])
-		result.append(G @ (M @ U))
+		result.append(G.dot(M.dot(U)))
 	result = np.array(result)
 	return result
 
@@ -167,7 +169,7 @@ def calcHermiteQP(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), speed=1):
 
 	Qj = np.zeros((4*N,4*N))
 	cj = np.zeros((4*N,3))
-	for i in range(N):
+	for i in xrange(N):
 
 		p0 = p[i,:]
 		p1 = p[i+1,:]
@@ -242,7 +244,7 @@ def calcHermiteQP(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), speed=1):
 
 	v = np.zeros((N+1,3))
 	a = np.zeros((N+1,3))
-	for i in range(N):
+	for i in xrange(N):
 		v[i,:] = x[4*i,:]
 		a[i,:] = x[4*i+2,:]
 	v[N,:] = x[4*(N-1)+1,:]
@@ -266,7 +268,7 @@ def calcHermite(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), speed=1):
 
 	v = np.zeros((N+1,3))
 	a = np.zeros((N+1,3))
-	for i in range(N):
+	for i in xrange(N):
 		v[i,:] = c[4*i,:]
 		a[i,:] = c[4*i+2,:]
 	v[N,:] = c[4*(N-1)+1,:]
@@ -283,7 +285,7 @@ def Ab(p, v0=np.zeros((1,3)), vT=np.zeros((1,3)), speed=1):
 	b = np.zeros((4*N,3))
 
 	# Main Equations
-	for i in range(N-1):
+	for i in xrange(N-1):
 
 		# v_{j}(1) = v_{j+1}(0)
 		A[4*i,4*i+1] = 1
@@ -374,7 +376,7 @@ def nPr(n,r):
 	if r > n:
 		return 0
 	ans = 1
-	for k in range(n,max(1,n-r),-1):
+	for k in xrange(n,max(1,n-r),-1):
 		ans = ans * k
 	return ans
 
@@ -464,32 +466,32 @@ def test_prunePath():
 	path = np.array([[0,0,0],[1,0,0],[2,0,0],[1.5,1,0],[1,1.5,0]])
 	t = np.array([1,2,3,4,5])
 	newpath, newt = prunePath(path,t)
-	print(newpath)
-	print(newt)
+	print newpath
+	print newt
 
 
 def test_spline():
 	planner = Planner(map=create_map())
-	planner.state['pos'] = np.array([1,3,0])
-	planner.target['pos'] = np.array([-1,-1,0])
-	planner.state['vel'] = np.array([0,0,0])
-	planner.target['vel'] = np.array([0,0,0])
+	planner.state[u'pos'] = np.array([1,3,0])
+	planner.target[u'pos'] = np.array([-1,-1,0])
+	planner.state[u'vel'] = np.array([0,0,0])
+	planner.target[u'vel'] = np.array([0,0,0])
 	planner.plan(dt_out=0.01)
-	ax = planner.map.plotObjects(t=planner.path['rought'], ax=None)
-	plotPaths((planner.path['x'],planner.path['roughx']), ax=ax)
+	ax = planner.map.plotObjects(t=planner.path[u'rought'], ax=None)
+	plotPaths((planner.path[u'x'],planner.path[u'roughx']), ax=ax)
 
 
 def plot_spline():
 	planner = Planner(map=create_map())
-	planner.state['pos'] = np.array([-2,-2,0.5])
-	planner.target['pos'] = np.array([2,2,0.5])
-	planner.state['vel'] = np.array([0,0,0])
-	planner.target['vel'] = np.array([0,0,0])
+	planner.state[u'pos'] = np.array([-2,-2,0.5])
+	planner.target[u'pos'] = np.array([2,2,0.5])
+	planner.state[u'vel'] = np.array([0,0,0])
+	planner.target[u'vel'] = np.array([0,0,0])
 	planner.plan(dt_out=0.01)
-	viewer = Viewer(path=planner.path['x'],t=planner.path['t'],map=planner.map)
+	viewer = Viewer(path=planner.path[u'x'],t=planner.path[u't'],map=planner.map)
 	viewer.show()
 
-if __name__ == '__main__':
+if __name__ == u'__main__':
 	
 	plot_spline()
 
