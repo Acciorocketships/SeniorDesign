@@ -16,7 +16,8 @@ class Mainloop:
 					   'speed':1}
 
 		self.state = {'pos':np.zeros((3,)), 
-					  'vel':np.array((3,))}
+					  'vel':np.zeros((3,)),
+					  'acc':np.zeros((3,)),}
 
 		self.path = {'x': np.zeros((0,3)),
 					 'v': np.zeros((0,3)),

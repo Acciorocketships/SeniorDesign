@@ -36,7 +36,7 @@ class Map:
 
 
 	# Plot all objects at all points in time
-	def plotObjects(self, t=0, ax=None):
+	def plotObjects(self, t=0, line=['o','--'], ax=None):
 		if not isinstance(t, np.ndarray):
 			t = np.array([t])
 		t = np.reshape(t,(-1,))
@@ -51,9 +51,9 @@ class Map:
 				path = []
 				for i in range(t.size):
 					pos = obj.pos(t[i])
-					axis.plot(pos[:,0], pos[:,1], pos[:,2], 'o', c=color, alpha=(i+1)/t.size)
+					axis.plot(pos[:,0], pos[:,1], pos[:,2], line[0], c=color, alpha=(i+1)/t.size)
 				path = obj.pos(t)
-				axis.plot(path[:,0], path[:,1], path[:,2], '-', c=color)
+				axis.plot(path[:,0], path[:,1], path[:,2], line[1], c=color)
 		y_limits = axis.get_ylim3d()
 		z_limits = axis.get_zlim3d()
 		zavg = (z_limits[0] + z_limits[1]) / 2
@@ -383,9 +383,10 @@ class Viewer:
 				plt.plot(dest[:,0], dest[:,1], dest[:,2],'.', c=colors[i])
 
 		# Plot Agent
+		plt.plot([self.path[0,0]],[self.path[0,1]],[self.path[0,2]], 'gs')
+		plt.plot([self.path[-1,0]],[self.path[-1,1]],[self.path[-1,2]], 'rs')
 		self.agentaxes = plt.plot([self.path[0,0]],[self.path[0,1]],[self.path[0,2]], 'bX')[0]
 		plt.plot(self.path[:,0],self.path[:,1],self.path[:,2], '--')
-		plt.plot([self.path[-1,0]],[self.path[-1,1]],[self.path[-1,2]], 'rs')
 
 		# Update Callback
 		axt = plt.axes([0.125, 0.01, 0.775, 0.03])
