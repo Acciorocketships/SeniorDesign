@@ -1,5 +1,7 @@
 from threading import Thread
 import numpy as np
+from Map import *
+from Planning import *
 
 
 class Mainloop:
@@ -9,18 +11,25 @@ class Mainloop:
 
 		self.map = Map()
 
-		self.targetpos = np.array([0,0,0])
-		self.targetvel = np.array([0,0,0])
+		self.target = {'pos':np.zeros((3,)), 
+					   'vel':np.zeros((3,)),
+					   'speed':1}
 
-		self.pos = np.array([0,0,0])
-		self.vel = np.array([0,0,0])
-		self.rot = np.array([0,0,0])
+		self.state = {'pos':np.zeros((3,)), 
+					  'vel':np.zeros((3,)),
+					  'acc':np.zeros((3,)),}
 
-		self.path = []
+		self.path = {'x': np.zeros((0,3)),
+					 'v': np.zeros((0,3)),
+					 't': np.zeros((0,)),
+					 'roughx': np.zeros((0,3)),
+					 'rought': np.zeros((0,3))}
+
+		self.planner = Planner(map=self.map,target=self.target,state=self.state,path=self.path)
 
 
 
-	def update(self,lidar):
+	def updateMap(self,lidar):
 
 		pass
 
@@ -34,15 +43,11 @@ class Mainloop:
 
 	def updatePath(self):
 
-		pass
-
-		## Ryan's logic here ##
-
-		## updates the self.path member variable, a list of positions from the current position to the goal ##
+		self.planner.plan(dt_out=0.01, dt_astar=0.1)
 
 
 
-# If I have time, I will add a controller, but for now, I'm just going to generate a path
-# Eddie will take the next position in the path and fly toward that as a waypoint
 
-
+if __name__ == '__main__':
+	main = Mainloop()
+	main.updatePath()
