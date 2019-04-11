@@ -5,10 +5,14 @@ import math
 import argparse
 import sys
 import os
+from os import listdir
+from os.path import isfile, join
 from PIL import Image
 import tools
 import numpy as np
 from agent import Agent
+from AgentManager import AgentManager
+import subprocess
 
 class CloudManager:
 
@@ -20,7 +24,7 @@ class CloudManager:
     '''
     def __init__(self, wr, hr, view, do_round=True):
         self.cloud = pcl.PointCloud()
-        self.agents = []
+        self.agManager = AgentManager()
         self.view = view
         self.wr = wr #max width view in radians
         self.hr = hr #max height view in radians
@@ -30,8 +34,6 @@ class CloudManager:
         self.mj = None
         self.hasmatrix = False
         self.voxel_size = 5000 #10 meters
-
-        #self.agents = AgentsManager()
 
     '''
     Purpose: given a point cloud object, merge it into the saved big point cloud
@@ -182,6 +184,12 @@ class CloudManager:
         return coords
 
 
+    def run_detector():
+        python_command = "python3 detector.py test.jpg" 
+        process = subprocess.Popen(python_command.split(), stdout=subprocess.PIPE)
+        output, error = process.communicate()
+
+
     '''
     DONE ABOVE
     ----------------------------------------------------------------------------------------------------
@@ -242,20 +250,12 @@ class CloudManager:
                 except:
                     pass
 
-            '''
-            TODO make this actually useful
-            
             agents = tools.read_agents()
             for a in agents:
                 bounds = [int(x) for x in agents[a]]
-                items = []
-                for n in range(max(0, bounds[0]), min(projection.shape[0], bounds[2])):
-                    for m in range(max(0, bounds[1]), min(projection.shape[1], bounds[3])):
-                        items.append(temp_matrix[n][m])
-                ag = Agent(items)
-                self.add_agent(ag)
-            '''
-
+                temp_m = temp_matrix[bounds[0]:bounds[2], bounds[1]:bounds[3]]
+                self.agManager.add_agent(pcl.PointCloud(temp_m.flatten()))
+            
         return list(new_pts)
 
      
@@ -316,23 +316,22 @@ class CloudManager:
     cropped_cloud = current points occupying the same space
     purpose: if there are few enough current points that we can use append instead of concat, speed up run time
     '''
-    def concat_vs_append(self, new_cloud, cropped_cloud):
+    def concat_or_append(self, new_cloud, cropped_cloud):
         do_concat = True
-        '''
+        if len(cropped_cloud.to_list()) < 0.3 * len(new_cloud.to_list()):
+            do_concat = False
+        ''' 
         TODO determine similarity
         https://ieeexplore.ieee.org/document/6238913
         '''
-        if do_concat:
-            return "concat"
-        else:
-            return "append"
+        return do_concat
 
     '''
     pos = current coordinate position
     purpose: if map includes distant space, save it and delete it to speed up processing
     '''
     def save_voxel(self, pos):
-        x, y, z = self.get_min_max_3D()
+        x, y, z = tools.find_min_max(self.cloud.to_list())
 
         begin_x = tools.round_down_multiple_of(x[0], self.voxel_size)
         end_x = tools.round_up_multiple_of(x[1], self.voxel_size)
@@ -357,7 +356,7 @@ class CloudManager:
                     cbf.set_Min(temp_x, temp_y, z[0], 1.0)
                     cbf.set_Max(temp_x + self.voxel_size, temp_y + self.voxel_size, z[1], 1.0)
                     cloud_out = cbf.filter()
-                    pcl.save(cloud_out, temp_x + "-" + temp_y + ".pcd")
+                    pcl.save(cloud_out, "x" + str(temp_x) + "-y" + str(temp_y) + ".pcd")
         
         cbf = self.cloud.make_cropbox()
         cbf.set_Min(safe_begin_x, safe_begin_y, z[0], 1.0)
@@ -365,36 +364,29 @@ class CloudManager:
         cloud_out = cbf.filter()
         self.cloud = cloud_out
 
-        #TODO delete irrelevant agents
+        relevant_ags = self.agManager.radius_search_points(pos, 3*self.voxel_size, 100)
+        self.agManager.drop_not_listed(relevant_ags)
 
     '''
     pos = current coordinate position
     purpose: if nearby map includes unknown space, check if saved map exists and load it
     '''
     def load_voxel(self, pos):
-        x, y, z = self.get_min_max_3D()
-
-        begin_x = tools.round_down_multiple_of(x[0], self.voxel_size)
-        end_x = tools.round_up_multiple_of(x[1], self.voxel_size)
-        begin_y = tools.round_down_multiple_of(y[0], self.voxel_size)
-        end_y = tools.round_up_multiple_of(y[1], self.voxel_size)
-
+        x, y, z = tools.find_min_max(self.cloud.to_list())
         safe_begin_x = tools.round_down_multiple_of(pos[0] - 2*self.voxel_size, self.voxel_size)
         safe_end_x = tools.round_up_multiple_of(pos[0] + 2*self.voxel_size, self.voxel_size)
         safe_begin_y = tools.round_down_multiple_of(pos[1] - 2*self.voxel_size, self.voxel_size)
         safe_end_y = tools.round_up_multiple_of(pos[1] + 2*self.voxel_size, self.voxel_size)
 
-        for i in range((end_x - begin_x)/self.voxel_size):
-            for j in range((end_y - begin_y)/self.voxel_size):
-                temp_x = begin_x + i * self.voxel_size
-                temp_y = begin_y + j * self.voxel_size
+        for i in range((safe_end_x - safe_begin_x)/self.voxel_size):
+            for j in range((safe_end_y - safe_begin_y)/self.voxel_size):
+                temp_x = safe_begin_x + i * self.voxel_size
+                temp_y = safe_begin_y + j * self.voxel_size
                 try:
-                    name = temp_x + "-" + temp_y + ".pcd"
-                    f = open(name)
+                    name = "x" + str(temp_x) + "-y" + str(temp_y) + ".pcd"
                     temp_c = pcl.load(name)
                     self.cloud = self.cloud + temp_c
                 except:
                     pass
-
 
    

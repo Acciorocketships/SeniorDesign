@@ -2,6 +2,8 @@ import math
 import numpy as np
 import os
 import cv2
+import subprocess
+
 
 '''
 general math tool functions -------------------------------------------------------------------------------------------------
@@ -222,17 +224,49 @@ def find_min_max(points_list):
     return (min_x, max_x), (min_y, max_y), (min_z, max_z)
 
 def find_bounding_box_center(points_list):
-    x, y, z = tools.find_min_max(agent_cloud)
+    x, y, z = find_min_max(points_list)
     mid_x = (x[0] + x[1])/2
     mid_y = (y[0] + y[1])/2
     mid_z = (z[0] + z[1])/2
-    return (x, y, z)
+    return (mid_x, mid_y, mid_z)
 
 def pts_dist(pt1, pt2):
     x = pt1[0] - pt2[0]
     y = pt1[1] - pt2[1]
     z = pt1[2] - pt2[2]
     return len_vector((x, y, z))
+'''
+import cv2
+ import numpy as np
+ import matplotlib.pyplot as plt
+ from sklearn.neighbors import NearestNeighbors
+'''
+
+def iter_closest_pts(a, b, init_pose=(0,0,0), no_iterations = 13):
+    src = np.array([a.T], copy=True).astype(np.float32)
+    dst = np.array([b.T], copy=True).astype(np.float32)
+
+    Tr = np.array([[np.cos(init_pose[2]),-np.sin(init_pose[2]),init_pose[0]],
+                   [np.sin(init_pose[2]), np.cos(init_pose[2]),init_pose[1]],
+                   [0,                    0,                   1          ]])
+
+    src = cv2.transform(src, Tr[0:2])
+
+    for i in range(no_iterations):
+        nbrs = NearestNeighbors(n_neighbors=1, algorithm='auto',
+                                warn_on_equidistant=False).fit(dst[0])
+        distances, indices = nbrs.kneighbors(src[0])
+        T = cv2.estimateRigidTransform(src, dst[0, indices.T], False)
+        src = cv2.transform(src, T)
+        Tr = np.dot(Tr, np.vstack((T,[0,0,1])))
+    return Tr[0:2]
+
+
+def round_coords(tup):
+    result = []
+    for x in range(len(tup)):
+        result.append(int(tup[x]))
+    return result
 
 '''
 detection class -------------------------------------------------------------------------------------------------
@@ -250,7 +284,7 @@ def in_coords(frame, pt):
 '''
 saved = file containing 4 numbers on each line to identify agent locations
 '''
-def read_agents(saved="s.txt"):
+def read_agents(saved="detect_target.txt"):
     results = dict()
     counter = 0
     with open(saved, "r") as f:
@@ -258,4 +292,22 @@ def read_agents(saved="s.txt"):
             results[counter] =line.split()
             counter+= 1
     return results
+
+'''
+miscellaneous tools ---------------------------------------------------------------------------------------------
+'''
+
+def get_directory():
+    python_command = "readlink -f CloudManager.py"  # launch your python2 script using bash
+    process = subprocess.Popen(python_command.split(), stdout=subprocess.PIPE)
+    output, error = process.communicate()
+    l = output.split("CloudManager.py\n");
+    return l[0]
+
+def get_random_cloud(num=50, scale=1000):
+    temp = np.array(scale*np.random.random((num,3)))
+    temp = np.float32(temp)
+    return temp
+    
+
 

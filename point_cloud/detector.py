@@ -18,7 +18,7 @@ class Detector:
             results.append(pts)
         return results
 
-    def run_save(self, image_path, storage_path='s.txt'):
+    def run_save(self, image_path, storage_path='detect_target.txt'):
         detections = self.detector.detectObjectsFromImage(input_image=os.path.join(self.execution_path , image_path))
         with open(storage_path, "w+") as f:
             for eachObject in detections:
@@ -26,6 +26,18 @@ class Detector:
                 pts = eachObject["box_points"]
                 f.write(str(pts[0]) + ' ' + str(pts[1]) + ' ' + str(pts[2]) + ' ' + str(pts[3]) + "\n")
 
+    def run_return(self, image_path):
+        detections = self.detector.detectObjectsFromImage(input_image=os.path.join(self.execution_path , image_path))
+        result = []
+        for eachObject in detections:
+            pts = eachObject["box_points"]
+            temp = []
+            temp.append(pts[0])
+            temp.append(pts[1])
+            temp.append(pts[2])
+            temp.append(pts[3])
+            result.append(temp)
+        return result
+
 d = Detector()
 d.run_save(sys.argv[1])
-#print(sys.argv[1])

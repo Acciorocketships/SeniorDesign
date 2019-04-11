@@ -121,7 +121,7 @@ def test_depth_map2():
         for y in range(-20, 20):
             m.append((x, y, 0))
     cloud.cloud = pcl.PointCloud(m)
-    im = imread("res/rabbit.png")
+    im = imread("res/scene.jpg")
     if len(im.shape) > 2:
         im = tools.make_greyscale(im)
     arr = cloud.process_depth_map((0, 0, -10), im, (0, 0, 0), (0, 0, 0))
@@ -219,6 +219,30 @@ def test_manual():
 def find_function():
     cloud.get_min_max_3D()
 
+def test_reduce_map():
+    options = [5000, -5000, 10000, -10000, 15000, -15000, 20000, -20000, 25000, -25000, 30000, -30000]
+    pts = [(x, y, z) for x in options for y in options for z in options]
+    pts.append((0, 0, 0))
+    cloud.cloud = pcl.PointCloud(pts)
+    cloud.print_cloud()
+    cloud.save_voxel((0, 0, 0))
+    cloud.print_cloud()
+
+def test_load_map():
+    cloud.cloud = pcl.PointCloud([(0, 0, 0)])
+    cloud.load_voxel((10000, 10000, 0))
+    cloud.print_cloud()
+
+def test_load_one():
+    cloud.cloud = pcl.load("x15000-y25000.pcd")
+    cloud.print_cloud()
+
+def test_path():
+    tools.get_directory()
+
+def test_random():
+    tools.get_random_cloud()
+
 #test_depth_map()
 #test_append()
 #test_cube()
@@ -235,8 +259,11 @@ test_depth_map2()
 #test_distance()
 #test_manual()
 #find_function()
-
-
+#test_reduce_map()
+#test_load_map()
+#test_path()
+#test_load_one()
+#test_random()
 
 
 
