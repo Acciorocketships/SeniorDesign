@@ -10,9 +10,9 @@ from os.path import isfile, join
 from PIL import Image
 import tools
 import numpy as np
-from agent import Agent
 from AgentManager import AgentManager
 import subprocess
+
 
 class CloudManager:
 
@@ -197,6 +197,109 @@ class CloudManager:
     '''
 
     '''
+    NEW PLAN:
+
+    1. get cloud relative to camera's position
+    2. compare with previous cloud
+    3. use SIFT to match features in each cloud
+    4. pass features to ICP to determine rotation
+    5. apply rotation to new input to determine where it is located
+    '''
+
+
+    '''
+    projection = 2d depth map 
+    returns 3d matrix where each 2d cell is one (xyz) coordinate of that pixel in 3d space
+    '''
+    def convert_relatively(self, projection):
+        new_pts = set()
+
+        if not self.hasmatrix:
+            self.make_radian_matrix(projection.shape)
+
+        temp_matrix = np.zeros((projection.shape[0], projection.shape[1], 3)).tolist()
+        
+        adjustment_high = 0.99 #max 1
+        adjustment_low = 0 #min 0
+        vect = (0, 0, 1)
+        vert = (0, 1, 0)
+        horiz = (-1, 0, 0)
+        pos = (0, 0, 0)
+
+        for j_counter in range(projection.shape[1]):
+            for i_counter in range(projection.shape[0]):
+                try:
+                    pix_dist = self.view - float(projection[i_counter][j_counter]) / 255 * self.view
+                    if pix_dist <= adjustment_high * self.view and pix_dist >= adjustment_low * self.view:
+                        #get rotation
+                        m_i = tools.rmatrix_to_vector(tools.invert(vert), self.mj[i_counter][j_counter])
+                        m_j = tools.rmatrix_to_vector(tools.invert(horiz), self.mi[i_counter][j_counter])
+
+                        max_vect = tools.normalize(vect, tools.len_vector(vect))
+                        max_vect = tools.vector_multiplier(max_vect, self.view)
+
+                        #get vector from camera to pixel, with vector in objective 3D space
+                        pv = [tools.dot_product(vect, m_i[0]), tools.dot_product(vect, m_i[1]), tools.dot_product(vect, m_i[2])]
+                        pv = [tools.dot_product(pv, m_j[0]), tools.dot_product(pv, m_j[1]), tools.dot_product(pv, m_j[2])]
+                        pv = tools.make_unit_vector(pv)
+                        pix_vect = tools.vector_multiplier(pv, pix_dist)
+
+                        #get position of this point in 3D space
+                        pix_pt = tools.sum_vectors(pos, pix_vect)
+                        if self.do_round:
+                            new_pts.add(tuple(tools.make_ints(pix_pt)))
+                            pix_ints = tools.make_ints(pix_pt)
+                            temp_matrix[i_counter][j_counter][0] = pix_ints[0]
+                            temp_matrix[i_counter][j_counter][1] = pix_ints[1]
+                            temp_matrix[i_counter][j_counter][2] = pix_ints[2]
+                        else:
+                            new_pts.add(tuple(pix_pt))
+                            temp_matrix[i_counter][j_counter][0] = pix_pt[0]
+                            temp_matrix[i_counter][j_counter][1] = pix_pt[1]
+                            temp_matrix[i_counter][j_counter][2] = pix_pt[2]
+                except:
+                    pass
+
+        return temp_matrix
+        #TODO agents
+
+    '''
+    prev_rbg_img = image from previous snapshot
+    new_rbg_img = image just taken right now
+    prev_depth_cloud = cloud from previous depth image
+    new_depth_img = depth image right now
+    Purpose: 
+        1. use SIFT on rgb images to identify features
+        2. make new cloud relative to camera's location
+        3. use ICP to identify change between prev cloud and new cloud
+        4. apply change to cloud to know where it is
+        5. update all relevant things 
+    '''
+    def get_transformation(self, prev_rbg_img, new_rbg_img, prev_depth_img, new_depth_img):
+        kp1_coords, kp2_coords = tools.flann_sift(prev_rbg_img, new_rbg_img)
+
+        prev_depth_matrix = convert_relatively(prev_depth_img)
+        new_depth_matrix = convert_relatively(new_depth_img)
+        
+        kp1 = []
+        kp2 = []
+        for tup in kp1_coords:
+            kp1.append(prev_depth_matrix[tup[0]][tup[1]])
+
+        for tup in kp2_coords:
+            kp2.append(new_depth_matrix[tup[0]][tup[1]])
+
+        transformation = []
+
+        '''
+        TODO 
+        1.get ICP to work
+        2.apply transformation to points somehow????
+        '''
+
+        return transformation
+
+    '''
     Given depth image, convert to points in 3D space
     pos = camera x y z in objective 3D space
     projection = 2D numpy matrix of depth values
@@ -215,7 +318,7 @@ class CloudManager:
         if not self.hasmatrix:
             self.make_radian_matrix(projection.shape)
 
-        temp_matrix = np.zeros(projection.shape).tolist()
+        temp_matrix = np.zeros(projection.shape).to_list()
 
         adjustment_high = 0.99 #max 1
         adjustment_low = 0 #min 0
@@ -243,10 +346,10 @@ class CloudManager:
                         pix_pt = tools.sum_vectors(pos, pix_vect)
                         if self.do_round:
                             new_pts.add(tuple(tools.make_ints(pix_pt)))
-                            temp_matrix[i][j] = tuple(tools.make_ints(pix_pt))
+                            temp_matrix[i_counter][j_counter] = tuple(tools.make_ints(pix_pt))
                         else:
                             new_pts.add(tuple(pix_pt))
-                            temp_matrix[i][j] = tuple(pix_pt)
+                            temp_matrix[i_counter][j_counter] = tuple(pix_pt)
                 except:
                     pass
 

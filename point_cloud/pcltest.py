@@ -4,6 +4,7 @@ import math
 import tools
 from CloudManager import CloudManager
 import sys
+import cv2
 import numpy as np
 import os
 from PIL import Image
@@ -113,21 +114,6 @@ def test_radius_search():
     cloud.cloud = pcl.PointCloud(t+s)
     coords = cloud.radius_search((0,0,0), 5, 5000)
     cloud.save_points("t.txt", coords)
-
-
-def test_depth_map2():
-    m = []
-    for x in range(-20, 20):
-        for y in range(-20, 20):
-            m.append((x, y, 0))
-    cloud.cloud = pcl.PointCloud(m)
-    im = imread("res/scene.jpg")
-    if len(im.shape) > 2:
-        im = tools.make_greyscale(im)
-    arr = cloud.process_depth_map((0, 0, -10), im, (0, 0, 0), (0, 0, 0))
-    cloud.save_points("t.txt", arr + m)
-    #cloud.concat_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
-    #cloud.save_cloud("t.txt")
 
 def test_depth_map3():
     m = np.zeros((100, 100))
@@ -243,13 +229,79 @@ def test_path():
 def test_random():
     tools.get_random_cloud()
 
+def test_sift():
+    img1 = cv2.imread('res/food.jpg',0)
+    img2 = cv2.imread('res/food_crop.jpg',0)
+    tools.flann_sift(img1, img2)
+
+def test_depth_map2():
+    m = []
+    for x in range(-20, 20):
+        for y in range(-20, 20):
+            m.append((x, y, 0))
+    cloud.cloud = pcl.PointCloud(m)
+    im = imread("res/scene.jpg")
+    if len(im.shape) > 2:
+        im = tools.make_greyscale(im)
+    arr = cloud.process_depth_map((0, 0, -10), im, (0, 0, 0), (0, 0, 0))
+    cloud.save_points("t.txt", arr + m)
+    #cloud.concat_depth_map((0, 0, 0), im, (math.pi, math.pi, 0), (math.pi, 0, 0))
+    #cloud.save_cloud("t.txt")
+
+def conv_rel():
+    im = imread("res/rabbit.png")
+    if len(im.shape) > 2:
+        im = tools.make_greyscale(im)
+    arr = cloud.convert_relatively(im)
+    arr = np.array(arr)
+    arr.flatten()
+    print(arr.shape)
+    #print(arr)
+    arr = [arr[x][y] for x in range(len(arr)) for y in range(len(arr[0]))]
+    cloud.save_points("t.txt", arr)
+
+def test_icp():
+    ang = np.linspace(-np.pi/2, np.pi/2, 320)
+    a = np.array([ang, np.sin(ang)])
+    print(a.shape)
+
+
+    th = np.pi/2
+    rot = np.array([[np.cos(th), -np.sin(th)],[np.sin(th), np.cos(th)]])
+    b = np.dot(rot, a) + np.array([[0.2], [0.3]])
+
+    M2 = tools.icp(a, b, [0.1,  0.33, np.pi/2.2], 30)
+
+    print("MATRIX")
+    print(M2)
+
+    src = np.array([a.T]).astype(np.float32)
+    res = cv2.transform(src, M2)
+    print(src.shape)
+    print(res.shape)
+    #print(b)
+
+    new_b = list(zip(b[0], b[1]))
+    new_b = [(float(tup[0]), float(tup[1]), 0) for tup in new_b]
+    #print(new_b)
+
+    #new_r = list(zip(res[0].T[0], res[0].T[1]), 'r.')
+    new_r = [(tup[0], tup[1], 0) for tup in res[0]]
+    #print(new_r)
+
+    new_a = list(zip(a[0], a[1]))
+    new_a = [(tup[0], tup[1], 0) for tup in new_a]
+    #print(new_a)
+
+    cloud.save_points("t.txt", new_b + new_r + new_a)
+
 #test_depth_map()
 #test_append()
 #test_cube()
 #test_depth_map_merge()
 #test_in_view()
 #test_out_of_view()
-test_depth_map2()
+#test_depth_map2()
 #test_depth_map3()
 #test_read_agents()
 #test_write_cloud2()
@@ -264,14 +316,15 @@ test_depth_map2()
 #test_path()
 #test_load_one()
 #test_random()
-
-
-
-
-
-
+#test_sift()
+#conv_rel()
+test_icp()
 
 
 
 
 print("test end")
+
+
+
+

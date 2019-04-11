@@ -3,6 +3,9 @@ import numpy as np
 import os
 import cv2
 import subprocess
+import copy
+from PIL import Image
+from sklearn.neighbors import NearestNeighbors
 
 
 '''
@@ -70,13 +73,33 @@ def matrix_add(m1, m2):
             result[i][j] = m1[i][j] + m2[i][j]
     return result
 
-def generate_image(func, max_i, max_j):
-    t = np.zeros((max_i, max_j))
-    #for i in range(max_i):
-    #    for j in range(max_j):
-            #t[i][j] = i + j
+#https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_feature2d/py_matcher/py_matcher.html
+def flann_sift(prev_img, new_img, fi_kd=0, trees=5, checks=50, k=2):
+    img1 = prev_img
+    img2 = new_img
+    tester = prev_img
 
-    return t
+    sift = cv2.xfeatures2d.SIFT_create()
+    kp1, des1 = sift.detectAndCompute(img1,None)
+    kp2, des2 = sift.detectAndCompute(img2,None)
+
+    index_params = dict(algorithm=fi_kd, trees=trees)
+    search_params = dict(checks=checks)  
+
+    flann = cv2.FlannBasedMatcher(index_params,search_params)
+    matches = flann.knnMatch(des1,des2,k=k)
+    matched_kp1 = []
+    matched_kp2 = []
+
+    for i,(m,n) in enumerate(matches):
+        if m.distance < 0.7*n.distance:
+            matched_kp1.append(tuple(round_coords(kp1[i].pt)))
+            matched_kp2.append(tuple(round_coords(kp2[m.trainIdx].pt)))
+
+    #cv2.imwrite("test1.png", prev_img)
+    #cv2.imwrite("test2.png", new_img)
+    return matched_kp1, matched_kp2
+
 
 # https://math.stackexchange.com/questions/142821/matrix-for-rotation-around-a-vector
 def rmatrix_to_vector(v, angle):
@@ -235,14 +258,9 @@ def pts_dist(pt1, pt2):
     y = pt1[1] - pt2[1]
     z = pt1[2] - pt2[2]
     return len_vector((x, y, z))
-'''
-import cv2
- import numpy as np
- import matplotlib.pyplot as plt
- from sklearn.neighbors import NearestNeighbors
-'''
 
-def iter_closest_pts(a, b, init_pose=(0,0,0), no_iterations = 13):
+#https://stackoverflow.com/questions/20120384/iterative-closest-point-icp-implementation-on-python?fbclid=IwAR17PnUyQlR28q9GbiAGvyL25i6cmMHe4MytMQvRnjDnuK9tdn8gQz593qk
+def icp(a, b, init_pose=(0,0,0), no_iterations = 13):
     src = np.array([a.T], copy=True).astype(np.float32)
     dst = np.array([b.T], copy=True).astype(np.float32)
 
@@ -253,8 +271,7 @@ def iter_closest_pts(a, b, init_pose=(0,0,0), no_iterations = 13):
     src = cv2.transform(src, Tr[0:2])
 
     for i in range(no_iterations):
-        nbrs = NearestNeighbors(n_neighbors=1, algorithm='auto',
-                                warn_on_equidistant=False).fit(dst[0])
+        nbrs = NearestNeighbors(n_neighbors=1, algorithm='auto').fit(dst[0])
         distances, indices = nbrs.kneighbors(src[0])
         T = cv2.estimateRigidTransform(src, dst[0, indices.T], False)
         src = cv2.transform(src, T)
