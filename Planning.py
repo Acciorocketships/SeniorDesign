@@ -447,8 +447,8 @@ def test_spline():
 
 def plot_spline():
 	planner = Planner(map=create_map())
-	planner.state['pos'] = np.array([0,-2,0.5])
-	planner.target['pos'] = np.array([2,2,-0.5])
+	planner.state['pos'] = np.array([1,-2,0.5])
+	planner.target['pos'] = np.array([-1,3,-0.5])
 	planner.state['vel'] = np.array([0,0,0])
 	planner.target['vel'] = np.array([0,0,0])
 	planner.plan(dt_out=0.01)

@@ -132,7 +132,7 @@ class Object:
 		# Other Attributes
 		self.type = 0 # 0 for moving, 1 for intelligent
 		self.classification = None # classification from RCNN
-		self.radius = 0.6
+		self.radius = 0.4
 		self.gaussian = GaussND(numN=(np.array([[0,0,0]]).T,self.radius*np.identity(3)))
 		self.gaussian = self.gaussian / self.gaussian[[0,0,0]]
 
@@ -179,7 +179,7 @@ class Object:
 	def pathpos(self,t):
 		t = np.array(t)
 		t = t.reshape((t.size,))
-		t = np.maximum(np.minimum(t, self.tRes*(self.path.shape[0]-1)*np.ones(t.shape)), np.zeros(t.shape))
+		t = np.maximum(np.minimum(t, self.tRes*(self.path.shape[0]-2)*np.ones(t.shape)), np.zeros(t.shape))
 		ilow = np.floor(t/self.tRes).astype(np.int)
 		ihigh = np.ceil(t/self.tRes).astype(np.int)
 		u = (t - self.tRes * ilow) / self.tRes
@@ -191,11 +191,14 @@ class Object:
 		return np.linalg.norm(np.array(pos1)-np.array(pos2))
 
 
-	def nextpos(self,pos,step):
+	def nextpos(self,pos,step,zaxis=True):
 		for dx in [-step, 0, step]:
 			for dy in [-step, 0, step]:
-				for dz in [-step, 0, step]:
-					yield pos + np.array([dx,dy,dz])
+				if zaxis:
+					for dz in [-step, 0, step]:
+						yield pos + np.array([dx,dy,dz])
+				else:
+					yield pos + np.array([dx,dy,0])
 
 
 	def pathplan(self,destination=None,dt=0.1,returnlevel=1):
@@ -395,7 +398,7 @@ class Viewer:
 		plt.show()
 
 	def angle(self,t):
-		return [45-5*t, -66+30*t]
+		return [45-5*t, 66+30*t]
 
 	def callback(self,t):
 		tidx = np.argmax(self.t>t)-1
@@ -416,38 +419,38 @@ if __name__ == '__main__':
 
 	m = Map()
 
-	o1 = Object(m)
-	o1.position = np.array([0,1,2])
-	o1.velocity = np.array([-0.5,1,-0.4])
-	m.objects.add(o1)
+	# o1 = Object(m)
+	# o1.position = np.array([0,-1,0.8])
+	# o1.velocity = np.array([0.5,1,-0.4])
+	# m.objects.add(o1)
 
 	o2 = Object(m)
-	o2.position = np.array([-1,3,-1])
+	o2.position = np.array([1,2,-1])
 	o2.velocity = np.array([-1,-0.5,0.2])
 	m.objects.add(o2)
 
 	o3 = Object(m)
-	o3.position = np.array([-1.5,1.5,0.5])
-	o3.velocity = np.array([0.5,0.5,-0.1])
+	o3.position = np.array([-1.1,-0.5,0.3])
+	o3.velocity = np.array([0.5,-0.2,-0.1])
 	m.objects.add(o3)
 
 	o4 = Object(m)
-	o4.position = np.array([0.8,-0.6,-1.5])
+	o4.position = np.array([-0.2,0.6,-0.5])
 	o4.velocity = np.array([-0.5,0.5,0.5])
 	m.objects.add(o4)
 
 	o5 = Object(m)
 	o5.position = np.array([0.5,0.7,0])
-	o5.velocity = np.array([0.2,-0.4,0.2])
+	o5.velocity = np.array([-0.2,-0.4,0.2])
 	m.objects.add(o5)
 
 	o6 = Object(m)
-	o6.position = np.array([-0.2,-0.5,0.3])
+	o6.position = np.array([0.2,-0.5,0.3])
 	o6.velocity = np.array([1,0,0.1])
 	m.objects.add(o6)
 
 	o7 = Object(m)
-	o7.position = np.array([-0.7,0,0.4])
+	o7.position = np.array([-0.7,0.3,0.4])
 	o7.velocity = np.array([0.8,0.4,-0.1])
 	m.objects.add(o7)
 
@@ -456,29 +459,36 @@ if __name__ == '__main__':
 	o.speed = 1
 	o.position = np.array([-1,0,0])
 	m.objects.add(o)
+	dest = np.array([1,1.5,0])
+	path, t = o.pathplan(destination=dest,dt=0.1,returnlevel=1)
 
-	dest = np.array([1,1.5,1])
-	path, t, dist, J, prox, togo = o.pathplan(destination=dest,dt=0.1,returnlevel=2)
+	o = Object(m)
+	o.type = 1
+	o.speed = 1
+	o.position = np.array([1,1,0])
+	m.objects.add(o)
+	dest = np.array([-1,-0.5,0])
+	path, t = o.pathplan(destination=dest,dt=0.1,returnlevel=1)
 
-	m.plot(T=t[-1],lim=[-3,3,-1,5,-3,3])
+	m.plot(T=t[-1],lim=[-3,3,-3,3,-3,3],plane=[0,1])
 
-	f = plt.figure()
-	f.add_subplot(2,2,1)
-	plt.plot(t, J)
-	plt.title("J")
-	f.add_subplot(2,2,2)
-	plt.plot(t, dist)
-	plt.title("Dist Travelled")
-	f.add_subplot(2,2,3)
-	plt.plot(t, prox)
-	plt.title("Proximity")
-	f.add_subplot(2,2,4)
-	plt.plot(t, togo)
-	plt.title("Dist to Go")
-	plt.show()
+	# f = plt.figure()
+	# f.add_subplot(2,2,1)
+	# plt.plot(t, J)
+	# plt.title("J")
+	# f.add_subplot(2,2,2)
+	# plt.plot(t, dist)
+	# plt.title("Dist Travelled")
+	# f.add_subplot(2,2,3)
+	# plt.plot(t, prox)
+	# plt.title("Proximity")
+	# f.add_subplot(2,2,4)
+	# plt.plot(t, togo)
+	# plt.title("Dist to Go")
+	# plt.show()
 
-	m.plotObjects(t)
-	plt.plot(path[:,0],path[:,1])
-	plt.xlim(-4,4)
-	plt.ylim(-4,4)
-	plt.show()
+	# m.plotObjects(t)
+	# plt.plot(path[:,0],path[:,1])
+	# plt.xlim(-4,4)
+	# plt.ylim(-4,4)
+	# plt.show()
