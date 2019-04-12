@@ -5,10 +5,14 @@ import math
 import argparse
 import sys
 import os
+from os import listdir
+from os.path import isfile, join
 from PIL import Image
 import tools
 import numpy as np
-from agent import Agent
+from AgentManager import AgentManager
+import subprocess
+
 
 class CloudManager:
 
@@ -20,7 +24,7 @@ class CloudManager:
     '''
     def __init__(self, wr, hr, view, do_round=True):
         self.cloud = pcl.PointCloud()
-        self.agents = []
+        self.agManager = AgentManager()
         self.view = view
         self.wr = wr #max width view in radians
         self.hr = hr #max height view in radians
@@ -30,8 +34,6 @@ class CloudManager:
         self.mj = None
         self.hasmatrix = False
         self.voxel_size = 5000 #10 meters
-
-        #self.agents = AgentsManager()
 
     '''
     Purpose: given a point cloud object, merge it into the saved big point cloud
@@ -182,11 +184,120 @@ class CloudManager:
         return coords
 
 
+    def run_detector():
+        python_command = "python3 detector.py test.jpg" 
+        process = subprocess.Popen(python_command.split(), stdout=subprocess.PIPE)
+        output, error = process.communicate()
+
+
     '''
     DONE ABOVE
     ----------------------------------------------------------------------------------------------------
     WIP BELOW
     '''
+
+    '''
+    NEW PLAN:
+
+    1. get cloud relative to camera's position
+    2. compare with previous cloud
+    3. use SIFT to match features in each cloud
+    4. pass features to ICP to determine rotation
+    5. apply rotation to new input to determine where it is located
+    '''
+
+
+    '''
+    projection = 2d depth map 
+    returns 3d matrix where each 2d cell is one (xyz) coordinate of that pixel in 3d space
+    '''
+    def convert_relatively(self, projection):
+        new_pts = set()
+
+        if not self.hasmatrix:
+            self.make_radian_matrix(projection.shape)
+
+        temp_matrix = np.zeros((projection.shape[0], projection.shape[1], 3)).tolist()
+        
+        adjustment_high = 0.99 #max 1
+        adjustment_low = 0 #min 0
+        vect = (0, 0, 1)
+        vert = (0, 1, 0)
+        horiz = (-1, 0, 0)
+        pos = (0, 0, 0)
+
+        for j_counter in range(projection.shape[1]):
+            for i_counter in range(projection.shape[0]):
+                try:
+                    pix_dist = self.view - float(projection[i_counter][j_counter]) / 255 * self.view
+                    if pix_dist <= adjustment_high * self.view and pix_dist >= adjustment_low * self.view:
+                        #get rotation
+                        m_i = tools.rmatrix_to_vector(tools.invert(vert), self.mj[i_counter][j_counter])
+                        m_j = tools.rmatrix_to_vector(tools.invert(horiz), self.mi[i_counter][j_counter])
+
+                        max_vect = tools.normalize(vect, tools.len_vector(vect))
+                        max_vect = tools.vector_multiplier(max_vect, self.view)
+
+                        #get vector from camera to pixel, with vector in objective 3D space
+                        pv = [tools.dot_product(vect, m_i[0]), tools.dot_product(vect, m_i[1]), tools.dot_product(vect, m_i[2])]
+                        pv = [tools.dot_product(pv, m_j[0]), tools.dot_product(pv, m_j[1]), tools.dot_product(pv, m_j[2])]
+                        pv = tools.make_unit_vector(pv)
+                        pix_vect = tools.vector_multiplier(pv, pix_dist)
+
+                        #get position of this point in 3D space
+                        pix_pt = tools.sum_vectors(pos, pix_vect)
+                        if self.do_round:
+                            new_pts.add(tuple(tools.make_ints(pix_pt)))
+                            pix_ints = tools.make_ints(pix_pt)
+                            temp_matrix[i_counter][j_counter][0] = pix_ints[0]
+                            temp_matrix[i_counter][j_counter][1] = pix_ints[1]
+                            temp_matrix[i_counter][j_counter][2] = pix_ints[2]
+                        else:
+                            new_pts.add(tuple(pix_pt))
+                            temp_matrix[i_counter][j_counter][0] = pix_pt[0]
+                            temp_matrix[i_counter][j_counter][1] = pix_pt[1]
+                            temp_matrix[i_counter][j_counter][2] = pix_pt[2]
+                except:
+                    pass
+
+        return temp_matrix
+        #TODO agents
+
+    '''
+    prev_rbg_img = image from previous snapshot
+    new_rbg_img = image just taken right now
+    prev_depth_cloud = cloud from previous depth image
+    new_depth_img = depth image right now
+    Purpose: 
+        1. use SIFT on rgb images to identify features
+        2. make new cloud relative to camera's location
+        3. use ICP to identify change between prev cloud and new cloud
+        4. apply change to cloud to know where it is
+        5. update all relevant things 
+    '''
+    def get_transformation(self, prev_rbg_img, new_rbg_img, prev_depth_img, new_depth_img):
+        kp1_coords, kp2_coords = tools.flann_sift(prev_rbg_img, new_rbg_img)
+
+        prev_depth_matrix = convert_relatively(prev_depth_img)
+        new_depth_matrix = convert_relatively(new_depth_img)
+        
+        kp1 = []
+        kp2 = []
+        for tup in kp1_coords:
+            kp1.append(prev_depth_matrix[tup[0]][tup[1]])
+
+        for tup in kp2_coords:
+            kp2.append(new_depth_matrix[tup[0]][tup[1]])
+
+        transformation = []
+
+        '''
+        TODO 
+        1.get ICP to work
+        2.apply transformation to points somehow????
+        '''
+
+        return transformation
 
     '''
     Given depth image, convert to points in 3D space
@@ -207,7 +318,7 @@ class CloudManager:
         if not self.hasmatrix:
             self.make_radian_matrix(projection.shape)
 
-        temp_matrix = np.zeros(projection.shape).tolist()
+        temp_matrix = np.zeros(projection.shape).to_list()
 
         adjustment_high = 0.99 #max 1
         adjustment_low = 0 #min 0
@@ -235,27 +346,19 @@ class CloudManager:
                         pix_pt = tools.sum_vectors(pos, pix_vect)
                         if self.do_round:
                             new_pts.add(tuple(tools.make_ints(pix_pt)))
-                            temp_matrix[i][j] = tuple(tools.make_ints(pix_pt))
+                            temp_matrix[i_counter][j_counter] = tuple(tools.make_ints(pix_pt))
                         else:
                             new_pts.add(tuple(pix_pt))
-                            temp_matrix[i][j] = tuple(pix_pt)
+                            temp_matrix[i_counter][j_counter] = tuple(pix_pt)
                 except:
                     pass
 
-            '''
-            TODO make this actually useful
-            
             agents = tools.read_agents()
             for a in agents:
                 bounds = [int(x) for x in agents[a]]
-                items = []
-                for n in range(max(0, bounds[0]), min(projection.shape[0], bounds[2])):
-                    for m in range(max(0, bounds[1]), min(projection.shape[1], bounds[3])):
-                        items.append(temp_matrix[n][m])
-                ag = Agent(items)
-                self.add_agent(ag)
-            '''
-
+                temp_m = temp_matrix[bounds[0]:bounds[2], bounds[1]:bounds[3]]
+                self.agManager.add_agent(pcl.PointCloud(temp_m.flatten()))
+            
         return list(new_pts)
 
      
@@ -316,23 +419,22 @@ class CloudManager:
     cropped_cloud = current points occupying the same space
     purpose: if there are few enough current points that we can use append instead of concat, speed up run time
     '''
-    def concat_vs_append(self, new_cloud, cropped_cloud):
+    def concat_or_append(self, new_cloud, cropped_cloud):
         do_concat = True
-        '''
+        if len(cropped_cloud.to_list()) < 0.3 * len(new_cloud.to_list()):
+            do_concat = False
+        ''' 
         TODO determine similarity
         https://ieeexplore.ieee.org/document/6238913
         '''
-        if do_concat:
-            return "concat"
-        else:
-            return "append"
+        return do_concat
 
     '''
     pos = current coordinate position
     purpose: if map includes distant space, save it and delete it to speed up processing
     '''
     def save_voxel(self, pos):
-        x, y, z = self.get_min_max_3D()
+        x, y, z = tools.find_min_max(self.cloud.to_list())
 
         begin_x = tools.round_down_multiple_of(x[0], self.voxel_size)
         end_x = tools.round_up_multiple_of(x[1], self.voxel_size)
@@ -357,7 +459,7 @@ class CloudManager:
                     cbf.set_Min(temp_x, temp_y, z[0], 1.0)
                     cbf.set_Max(temp_x + self.voxel_size, temp_y + self.voxel_size, z[1], 1.0)
                     cloud_out = cbf.filter()
-                    pcl.save(cloud_out, temp_x + "-" + temp_y + ".pcd")
+                    pcl.save(cloud_out, "x" + str(temp_x) + "-y" + str(temp_y) + ".pcd")
         
         cbf = self.cloud.make_cropbox()
         cbf.set_Min(safe_begin_x, safe_begin_y, z[0], 1.0)
@@ -365,36 +467,29 @@ class CloudManager:
         cloud_out = cbf.filter()
         self.cloud = cloud_out
 
-        #TODO delete irrelevant agents
+        relevant_ags = self.agManager.radius_search_points(pos, 3*self.voxel_size, 100)
+        self.agManager.drop_not_listed(relevant_ags)
 
     '''
     pos = current coordinate position
     purpose: if nearby map includes unknown space, check if saved map exists and load it
     '''
     def load_voxel(self, pos):
-        x, y, z = self.get_min_max_3D()
-
-        begin_x = tools.round_down_multiple_of(x[0], self.voxel_size)
-        end_x = tools.round_up_multiple_of(x[1], self.voxel_size)
-        begin_y = tools.round_down_multiple_of(y[0], self.voxel_size)
-        end_y = tools.round_up_multiple_of(y[1], self.voxel_size)
-
+        x, y, z = tools.find_min_max(self.cloud.to_list())
         safe_begin_x = tools.round_down_multiple_of(pos[0] - 2*self.voxel_size, self.voxel_size)
         safe_end_x = tools.round_up_multiple_of(pos[0] + 2*self.voxel_size, self.voxel_size)
         safe_begin_y = tools.round_down_multiple_of(pos[1] - 2*self.voxel_size, self.voxel_size)
         safe_end_y = tools.round_up_multiple_of(pos[1] + 2*self.voxel_size, self.voxel_size)
 
-        for i in range((end_x - begin_x)/self.voxel_size):
-            for j in range((end_y - begin_y)/self.voxel_size):
-                temp_x = begin_x + i * self.voxel_size
-                temp_y = begin_y + j * self.voxel_size
+        for i in range((safe_end_x - safe_begin_x)/self.voxel_size):
+            for j in range((safe_end_y - safe_begin_y)/self.voxel_size):
+                temp_x = safe_begin_x + i * self.voxel_size
+                temp_y = safe_begin_y + j * self.voxel_size
                 try:
-                    name = temp_x + "-" + temp_y + ".pcd"
-                    f = open(name)
+                    name = "x" + str(temp_x) + "-y" + str(temp_y) + ".pcd"
                     temp_c = pcl.load(name)
                     self.cloud = self.cloud + temp_c
                 except:
                     pass
-
 
    
